@@ -71,6 +71,9 @@ tasks {
             register("minecraft", "mod.mc_compat")
             register("command_api", "deps.fabric_command_api")
             register("pack_format", "pack_format")
+            val keyModule = if (sc.current.parsed >= "26.1") "fabric-key-mapping-api-v1" else "fabric-key-binding-api-v1"
+            inputs.property("key_module", keyModule)
+            set("key_module", keyModule)
             set("java", requiredJava.majorVersion)
         }
 

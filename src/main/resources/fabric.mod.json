@@ -25,7 +25,10 @@
   ],
   "depends": {
     "fabricloader": ">=0.14",
-    "fabric-api": "*",
+    "fabric-api-base": "*",
+    "${command_api}": "*",
+    "${key_module}": "*",
+    "fabric-lifecycle-events-v1": "*",
     "minecraft": "${minecraft}",
     "java": ">=${java}"
   }
