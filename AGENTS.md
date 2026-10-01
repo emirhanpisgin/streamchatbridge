@@ -1,9 +1,11 @@
 # AGENTS.md — working on this repository with an AI agent
 
-This repository is a **Stonecutter-based multi-loader Minecraft mod template**.
-One shared codebase builds for **Fabric, Forge and NeoForge**, each at one Minecraft
-version node. Read this file before changing anything — it explains the moving parts,
-the long-running commands, and the traps that cost real time to discover.
+This repository is **Stream Chat Bridge**, a Stonecutter-based multi-loader Minecraft
+mod that builds for **Fabric, Forge and NeoForge**. Each loader has a **floor** node
+(the oldest version it still supports) and a **newest** node; the nodes in between are
+the version sweep described in section 10. Read this file before changing anything — it
+explains the moving parts, the long-running commands, and the traps that cost real time
+to discover.
 
 ---
 
@@ -20,16 +22,25 @@ settings.gradle.kts             Stonecutter setup + node list
 stonecutter.gradle.kts          active node + per-node source override wiring
 stonecutter.properties.toml     mod identity + per-node loader pins/ranges/pack formats
 scripts/publish-modrinth.ps1    Modrinth release helper
+scripts/mavenize-queue.ps1      pre-warm node decompiles (launched via its .cmd wrapper)
 new-mod.ps1                     scaffolding: copy this template into a new mod
 ```
 
-Nodes currently declared (one per loader, newest Minecraft):
+Permanent nodes (floor and newest for each loader):
 
-| Node             | Loader   | Minecraft | Loader pin       |
-|------------------|----------|-----------|------------------|
-| `26.2-fabric`    | Fabric   | 26.2      | Fabric API 0.156 |
-| `26.1-forge`     | Forge    | 26.1      | Forge 62.0.9     |
-| `26.1-neoforge`  | NeoForge | 26.1      | NeoForge 26.1.0.19-beta |
+| Node                | Loader   | Minecraft | Loader pin              | Status                |
+|---------------------|----------|-----------|-------------------------|-----------------------|
+| `1.17.1-fabric`     | Fabric   | 1.17.1    | Fabric API 0.46.1+1.17  | floor, not ported yet |
+| `26.2-fabric`       | Fabric   | 26.2      | Fabric API 0.156        | newest / shipping     |
+| `1.17.1-forge`      | Forge    | 1.17.1    | Forge 37.1.1            | floor, not ported yet |
+| `26.1-forge`        | Forge    | 26.1      | Forge 62.0.9            | newest / shipping     |
+| `1.20.4-neoforge`   | NeoForge | 1.20.4    | NeoForge 20.4.251       | floor, not ported yet |
+| `26.1-neoforge`     | NeoForge | 26.1      | NeoForge 26.1.0.19-beta | newest / shipping     |
+
+`settings.gradle.kts` additionally declares the Forge (1.18–26.3) and NeoForge
+(1.20.6–26.3) traversal queue from section 10; those nodes exist so each version can
+be tested one at a time, and are deleted as they pass. Fabric needs one node per
+Minecraft version, so Fabric sweep nodes are added on demand.
 
 ---
 
@@ -39,7 +50,8 @@ Nodes currently declared (one per loader, newest Minecraft):
 # Convention for every Gradle invocation in this repo:
 #   --no-daemon --no-configuration-cache
 # The daemon flag avoids stale-plugin issues; the config cache is not safe with
-# Loom/ForgeGradle/ModDevGradle.
+# Loom/ForgeGradle/ModDevGradle. (`gradle.properties` still sets
+# org.gradle.configuration-cache=true for IDE use — always pass the flag on the CLI.)
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-25.0.2"   # daemon JVM (all nodes)
 
 .\gradlew.bat --no-daemon --no-configuration-cache :26.2-fabric:compileJava
@@ -48,10 +60,12 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-25.0.2"   # daemon JVM (all nodes)
 ```
 
 - `buildAndCollect` copies `jar` + `sourcesJar` into `build/libs/<mod version>/`.
-- Game runs use per-era JDKs automatically (Gradle toolchains, foojay downloads them):
-  Java 8 for <1.17, 17 for 1.18–1.20.4, 21 for 1.20.5–1.21.x, 25 for 26.x.
-  Do **not** try to run the game with the Gradle daemon's JVM; the build scripts
-  already select the right launcher.
+- Era JDKs: the era mapping is Java 8 for <1.17, 17 for 1.18–1.20.4, 21 for
+  1.20.5–1.21.x, 25 for 26.x. Forge runs select it explicitly (`runLauncher` in
+  `build.forge.gradle.kts`); ModDevGradle sets the project toolchain from the NeoForge
+  version, so NeoForge runs do too. The Fabric script only targets the era's bytecode
+  release with the daemon JDK — verify which JVM old Fabric nodes actually run on once
+  the 1.17.1 floor is ported.
 - One representative node compiles in ~30–60 s once its Minecraft artifacts are cached.
 
 ---
@@ -98,7 +112,7 @@ The first time a node is built, its Minecraft artifacts must be produced:
 
 | Loader   | Pipeline                        | Typical first run | Cache location |
 |----------|---------------------------------|-------------------|----------------|
-| Fabric   | Loom (yarn + remap)             | 1–3 min           | `~/.gradle/caches/fabric-loom` |
+| Fabric   | Loom (Mojang mappings)          | 1–3 min           | `~/.gradle/caches/fabric-loom` |
 | Forge    | ForgeGradle 7 mavenizer         | 3–10 min          | `~/.gradle/caches/minecraftforge` |
 | NeoForge | NeoFormRuntime (vineflower/jst) | 5–15 min          | `<gradle home>/caches/neoformruntime` |
 
@@ -192,12 +206,18 @@ taskkill /PID <gradle-or-java-pid> /T /F
 - **NeoForge without Gradle**: `gradlew :<node>:createLaunchScripts` generates
   `versions/<node>/build/moddev/runClient.cmd` / `runServer.cmd`. Use these to run
   server and client simultaneously (no Gradle lock contention).
-- **Forge mixins in dev** are registered via a `--mixin.config=<modid>.mixins.json`
-  argument in `build.forge.gradle.kts`; production uses the `MixinConfigs` jar manifest.
-- **NeoForge mixins** are declared in `META-INF/neoforge.mods.toml` (`[[mixins]]`);
-  for 1.20.4 (and only 1.20.4) the file must be named `META-INF/mods.toml` —
-  `build.neoforge.gradle.kts` renames it automatically for that node.
-- **Fabric mixins** are declared in `fabric.mod.json`.
+- **Mixins are currently Fabric-only** (the chat-send hook): declared in
+  `fabric.mod.json`. With Loom 1.17 the Mixin annotation processor is **off by default**
+  and no refmap is generated — do **not** add a `loom.mixin { }` block (Loom warns and
+  the legacy AP fails). Minecraft 26.x is unobfuscated, so mixin targets keep their
+  official names; on obfuscated floor nodes Loom remaps mixin targets in place — verify
+  this at the 1.17.1 floor.
+- **If you add Forge mixins**: Forge does not read `[[mixins]]` from `mods.toml`; add
+  `--mixin.config=<modid>.mixins.json` to the dev run args and a `MixinConfigs` manifest
+  attribute for production in `build.forge.gradle.kts`.
+- **If you add NeoForge mixins**: declare them in `META-INF/neoforge.mods.toml`
+  (`[[mixins]]`); for 1.20.4 (and only 1.20.4) the file must be named `META-INF/mods.toml`
+  — `build.neoforge.gradle.kts` renames it automatically for that node.
 - A dev server that fails with `FAILED TO BIND TO PORT` means another dev server is
   still running — find and stop it before retrying.
 
@@ -210,8 +230,10 @@ taskkill /PID <gradle-or-java-pid> /T /F
 2. `stonecutter.properties.toml`: add a `["<mc>"]` section and a
    `[<loader>."<mc>"]` section with:
    - `mod.mc_compat` — the version range the jar claims (e.g. `>=1.21.6 <1.21.7`)
-   - loader pin (`deps.fabric_api`, `deps.forge_loader` + `deps.forge_fml`,
-     `deps.neo_loader`)
+   - loader pin (`deps.fabric_api` + `deps.fabric_command_api` for Fabric,
+     `deps.forge_loader` + `deps.forge_fml` for Forge, `deps.neo_loader` for NeoForge;
+     the Fabric key-binding module is derived from the MC version in
+     `build.fabric.gradle.kts`)
    - `pack_format` — **the resource pack format of the lowest Minecraft version in
      the range**. It must never exceed any covered client's format or the game shows
      raw translation keys. Extract it from the client jar's `version.json`
@@ -238,7 +260,29 @@ the `versions/<node>` directory. Nothing else references nodes by name.
 - **NeoForge dev runs** need the mod registered in `neoForge { mods { ... } }`
   (`build.neoforge.gradle.kts`) or the mod silently never loads.
 - **NeoForge `EventBusSubscriber`**: 20.4 → nested `Mod.EventBusSubscriber`;
-  20.5–1.21.5 → `bus = Bus.GAME`; 1.21.6+ → no `bus` parameter.
+  20.5–1.21.5 → `bus = Bus.GAME`; 1.21.6+ → no `bus` parameter. On the 26.1 node the
+  annotation was **not** picked up by the dev runtime, so `StreamChatBridgeNeoForge`
+  registers listeners explicitly in its `@Mod` constructor
+  (`modBus.addListener(...)`, `NeoForge.EVENT_BUS.addListener(...)`). Reuse that pattern
+  for new NeoForge nodes unless you re-verify annotation scanning.
+- **Forge ≥26.1 uses EventBus 7**: import `net.minecraftforge.eventbus.api.listener.SubscribeEvent`
+  (the old `...eventbus.api.SubscribeEvent` no longer exists); a `@SubscribeEvent` method
+  returning `boolean` cancels the event when it returns `true` (or use
+  `alwaysCancelling = true` on a `void` method); client tick is
+  `net.minecraftforge.event.TickEvent.ClientTickEvent.Post`; `RegisterKeyMappingsEvent`
+  is **not** an `IModBusEvent`, so it must be handled on the FORGE bus — a mod-bus
+  subscriber class that mentions it crashes mod loading with
+  "BusGroup ... requires all events ... to inherit from IModBusEvent". Use
+  `FMLEnvironment.dist` for side checks.
+- **Screens**: `Minecraft.gui.setScreen` only exists from 26.2; 26.1 and older use
+  `Minecraft.setScreen`. Route screen switches through `minecraft/ui/ScbScreens`.
+- **Fabric chat hook**: `ClientSendMessageEvents` (fabric-message-api-v1) exists from
+  1.19; the 1.17.1 floor intercepts `ClientPacketListener.sendChat` with the Fabric
+  mixin instead.
+- **Fabric API modules**: in dev there is no umbrella `fabric-api` mod — `fabric.mod.json`
+  must depend on the individual modules on the dev classpath (`fabric-api-base`, the
+  command module, the key module, `fabric-lifecycle-events-v1`). The build script expands
+  the era-correct module ids into the metadata (`${command_api}`, `${key_module}`).
 - **NeoForge networking**: `PacketDistributor.sendToServer` exists from 20.5 up to
   21.6; from **21.7** it moved to `ClientPacketDistributor.sendToServer`.
 - **MC 1.21.11** renamed `ResourceLocation` to `Identifier`.
@@ -250,7 +294,8 @@ the `versions/<node>` directory. Nothing else references nodes by name.
 - **ForgeGradle 7** recompiles Minecraft with the JVM running the build. Some old
   nodes need a specific session JDK — declare `session_jdk = "<major>"` in the node's
   `stonecutter.properties.toml` section; the build script fails fast if mismatched.
-- **Forge < 1.17** needs `-noverify` and `launchwrapper` (handled).
+- **Forge < 1.17** needs `-noverify` and `launchwrapper`; the build script still handles
+  it, but the project floor is 1.17.1 so no such node is enabled.
 - **SecureModules 2.2.24** is forced for Forge 1.21.1–1.21.6 to avoid dev-run
   Guava classloading crashes (handled).
 
@@ -288,9 +333,10 @@ How to support a wide range of Minecraft versions without guessing which ones ne
 their own compilation target. Start at the bottom and walk upward; the code is
 shared the whole time.
 
-1. **Pick the floor** — the lowest Minecraft version the mod should support
-   (e.g. `1.16.5` for Forge, `1.20.4` for NeoForge). Add it as a permanent node
-   (section 6) and make the mod work there. This node is the first era boundary.
+1. **Pick the floor** — the lowest Minecraft version the mod should support. This
+   project's floors are `1.17.1` for Fabric and Forge and `1.20.4` for NeoForge
+   (NeoForge has no earlier release). Add it as a permanent node (section 6) and make
+   the mod work there. This node is the first era boundary.
 2. **Walk upward one version at a time.** For the next Minecraft version, add a
    *temporary* node for the same loader and run the same shared code on it.
 3. **Pass** → delete the temporary node. The version is covered by the current

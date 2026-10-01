@@ -1,9 +1,9 @@
 param(
     [string]$Token = $env:MODRINTH_TOKEN,
-    [string]$Version = "0.1.0",
+    [string]$Version = "1.0.0",
     [ValidateSet("fabric", "forge", "neoforge")]
     [string]$Loader = "fabric",
-    [string]$ProjectSlug = "examplemod",
+    [string]$ProjectSlug = "streamchatbridge",
     [string]$ArtifactsDir = "",
     [string]$Changelog = "",
     [switch]$IncludeSources,
