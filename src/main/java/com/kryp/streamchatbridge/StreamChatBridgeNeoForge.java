@@ -1,8 +1,11 @@
 package com.kryp.streamchatbridge;
 
 //? if neoforge {
-/*import net.neoforged.bus.api.IEventBus;
+/*import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.common.NeoForge;
 *///?}
 
 //? if neoforge {
@@ -11,6 +14,15 @@ public class StreamChatBridgeNeoForge {
 
     public StreamChatBridgeNeoForge(IEventBus modBus) {
         StreamChatBridge.LOGGER.info("Stream Chat Bridge initialized");
+
+        if (FMLEnvironment.getDist() == Dist.CLIENT) {
+            modBus.addListener(StreamChatBridgeNeoForgeClient::onClientSetup);
+            modBus.addListener(StreamChatBridgeNeoForgeClient::onRegisterKeyMappings);
+
+            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientChat);
+            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onRegisterClientCommands);
+            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientTick);
+        }
     }
 }
 *///?}
