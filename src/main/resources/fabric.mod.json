@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "Bridges Minecraft chat with Twitch and Kick.",
+  "authors": [
+    "Kryp Arnold"
+  ],
+  "contact": {
+    "homepage": "https://github.com/emirhanpisgin/streamchatbridge",
+    "sources": "https://github.com/emirhanpisgin/streamchatbridge",
+    "issues": "https://github.com/emirhanpisgin/streamchatbridge/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/streamchatbridge/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.kryp.streamchatbridge.StreamChatBridgeFabricClient"
+    ]
+  },
+  "mixins": [
+    "streamchatbridge.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14",
+    "fabric-api": "*",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}"
+  }
+}

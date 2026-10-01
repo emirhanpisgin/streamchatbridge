@@ -1,0 +1,37 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+
+# Stonecutter version nodes are generated, but per-node source overrides
+# (versions/<node>/src/**) are hand-written and committed.
+versions/*
+!versions/*/
+versions/*/build/
+versions/*/.gradle/
+
+# Minecraft run directory
+run/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java
+*.class
+out/
+bin/
+
+# Misc
+local.properties
+*.log

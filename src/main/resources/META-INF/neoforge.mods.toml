@@ -1,0 +1,18 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "${id}"
+displayName = "${name}"
+version = "${version}"
+description = "Bridges Minecraft chat with Twitch and Kick."
+license = "MIT"
+logoFile = "assets/streamchatbridge/icon.png"
+
+[[dependencies.${id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft}"
+ordering = "NONE"
+side = "CLIENT"

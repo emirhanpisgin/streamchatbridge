@@ -1,0 +1,26 @@
+# https://docs.minecraftforge.net/en/1.21.x/gettingstarted/modfiles/#modstoml
+modLoader="javafml"
+loaderVersion="[${fml},)"
+license="MIT"
+
+[[mods]]
+modId="${id}"
+version="${version}"
+displayName="${name}"
+description="Bridges Minecraft chat with Twitch and Kick."
+license="MIT"
+logoFile="assets/streamchatbridge/icon.png"
+
+[[dependencies.${id}]]
+modId="forge"
+mandatory=true
+versionRange="[${fml},)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.${id}]]
+modId="minecraft"
+mandatory=true
+versionRange="${minecraft}"
+ordering="NONE"
+side="CLIENT"
