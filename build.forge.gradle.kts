@@ -67,11 +67,13 @@ minecraft {
             // Forge < 1.17 ships LWJGL 3.2.2 with internal class hierarchy changes that fail
             // bytecode verification. JDK 8 supports -noverify natively.
             if (sc.current.parsed < "1.17") jvmArgs("-noverify")
-            // FG7's slime launcher does not register the dev mod for FML 48/49.0.x
-            // (1.20.2/1.20.3): mixins apply, but the mod container never loads and
-            // its classes stay invisible to transformed game code. FML 48 reads the
+            // FG7's slime launcher does not register the dev mod for FML 48
+            // (1.20.2): mixins apply, but the mod container never loads and its
+            // classes stay invisible to transformed game code. FML 48 reads the
             // legacy MOD_CLASSES env var for this, so provide it manually.
-            if (sc.current.parsed >= "1.20.2" && sc.current.parsed < "1.20.4") {
+            // FML 49 (1.20.3) removed that mechanism and instead needs the merged
+            // resources output (see below).
+            if (sc.current.parsed >= "1.20.2" && sc.current.parsed < "1.20.3") {
                 val classesDir = layout.buildDirectory.dir("classes/java/main").get().asFile.absolutePath
                 val resourcesDir = layout.buildDirectory.dir("resources/main").get().asFile.absolutePath
                 environment("MOD_CLASSES", "$modId%%$classesDir;$modId%%$resourcesDir")
@@ -132,11 +134,11 @@ java {
     withSourcesJar()
 }
 
-// Forge 1.20.4+ FML discovers dev-run mods per classpath entry and expects each mod
+// Forge 1.20.3+ FML discovers dev-run mods per classpath entry and expects each mod
 // file (directory) to contain BOTH classes and resources (the old MOD_CLASSES
-// mechanism was removed). The 1.20.4+ MDK solves this by merging the resources
-// output into the classes output directory.
-if (sc.current.parsed >= "1.20.4") {
+// mechanism was removed in FML 49). The 1.20.3+ MDK solves this by merging the
+// resources output into the classes output directory.
+if (sc.current.parsed >= "1.20.3") {
     sourceSets.named("main") {
         output.setResourcesDir(output.classesDirs.singleFile)
     }
