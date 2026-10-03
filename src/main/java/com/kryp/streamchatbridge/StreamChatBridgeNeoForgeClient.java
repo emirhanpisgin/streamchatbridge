@@ -9,9 +9,14 @@ import net.minecraft.client.Minecraft;
 
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientChatEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+*///?}
+//? if neoforge && >=1.20.6 {
+/*import net.neoforged.neoforge.client.event.ClientTickEvent;
+*///?}
+//? if neoforge && <1.20.6 {
+/*import net.neoforged.neoforge.event.TickEvent;
 *///?}
 
 //? if neoforge {
@@ -35,8 +40,16 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
         StreamChatCommands.register(event.getDispatcher());
     }
 
-    public static void onClientTick(ClientTickEvent.Post event) {
+    //? if >=1.20.6 {
+    /^public static void onClientTick(ClientTickEvent.Post event) {
         StreamChatBridgeClient.onClientTick(Minecraft.getInstance());
     }
+    ^///?} else {
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            StreamChatBridgeClient.onClientTick(Minecraft.getInstance());
+        }
+    }
+    //?}
 }
 *///?}

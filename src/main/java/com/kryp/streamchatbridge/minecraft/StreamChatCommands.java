@@ -20,9 +20,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.MutableComponent;
 
-//? if fabric {
+//? if fabric && >=1.19 {
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-//?}
+//?} else if fabric {
+/*import net.fabricmc.fabric.api.client.command.v1.ClientCommandManager;
+*///?}
 
 public final class StreamChatCommands {
 
@@ -30,9 +32,11 @@ public final class StreamChatCommands {
     }
 
     public static void register() {
-        //? if fabric {
+        //? if fabric && >=1.19 {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(build()));
-        //?}
+        //?} else if fabric {
+        /*ClientCommandManager.DISPATCHER.register(build());
+        *///?}
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {

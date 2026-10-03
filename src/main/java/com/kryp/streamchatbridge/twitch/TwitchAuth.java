@@ -215,7 +215,7 @@ public final class TwitchAuth {
 
             JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
 
-            if (!json.has("data") || json.getAsJsonArray("data").isEmpty()) {
+            if (!json.has("data") || json.getAsJsonArray("data").size() == 0) {
 
                 return false;
             }
@@ -273,7 +273,7 @@ public final class TwitchAuth {
 
             JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
 
-            if (!json.has("data") || json.getAsJsonArray("data").isEmpty()) {
+            if (!json.has("data") || json.getAsJsonArray("data").size() == 0) {
 
                 return null;
             }

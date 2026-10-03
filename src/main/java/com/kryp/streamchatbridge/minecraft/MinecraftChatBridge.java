@@ -5,6 +5,7 @@ import com.kryp.streamchatbridge.config.ConfigManager;
 import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.kick.KickClient;
 import com.kryp.streamchatbridge.twitch.TwitchClient;
+import com.kryp.streamchatbridge.util.ScbText;
 import com.kryp.streamchatbridge.util.Threads;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -189,7 +190,7 @@ public final class MinecraftChatBridge {
             message = "";
         }
 
-        MutableComponent result = Component.empty();
+        MutableComponent result = ScbText.empty();
 
         ChatFormatting currentColor = null;
 
@@ -275,7 +276,7 @@ public final class MinecraftChatBridge {
             return;
         }
 
-        MutableComponent component = Component.literal(text);
+        MutableComponent component = ScbText.literal(text);
 
         if (color != null) {
             component.withStyle(color);
@@ -345,52 +346,62 @@ public final class MinecraftChatBridge {
      */
 
     public static MutableComponent systemMessage() {
-        return Component.literal("[Stream Chat Bridge] ").withStyle(ChatFormatting.DARK_GRAY);
+        return ScbText.literal("[Stream Chat Bridge] ").withStyle(ChatFormatting.DARK_GRAY);
     }
 
     public static MutableComponent twitch() {
-        return Component.literal("Twitch").withStyle(ChatFormatting.DARK_PURPLE);
+        return ScbText.literal("Twitch").withStyle(ChatFormatting.DARK_PURPLE);
     }
 
     public static MutableComponent kick() {
-        return Component.literal("Kick").withStyle(ChatFormatting.GREEN);
+        return ScbText.literal("Kick").withStyle(ChatFormatting.GREEN);
     }
 
     public static MutableComponent label(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.GRAY);
+        return ScbText.literal(text).withStyle(ChatFormatting.GRAY);
     }
 
     public static MutableComponent value(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.WHITE);
+        return ScbText.literal(text).withStyle(ChatFormatting.WHITE);
     }
 
     public static MutableComponent success(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.GREEN);
+        return ScbText.literal(text).withStyle(ChatFormatting.GREEN);
     }
 
     public static MutableComponent warning(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.YELLOW);
+        return ScbText.literal(text).withStyle(ChatFormatting.YELLOW);
     }
 
     public static MutableComponent error(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.RED);
+        return ScbText.literal(text).withStyle(ChatFormatting.RED);
     }
 
     public static MutableComponent separator(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.DARK_GRAY);
+        return ScbText.literal(text).withStyle(ChatFormatting.DARK_GRAY);
     }
 
     public static void showLocalMessage(String message) {
-        showLocalMessage(Component.literal(message));
+        showLocalMessage(ScbText.literal(message));
     }
 
     public static void showLocalMessage(Component message) {
         Minecraft client = Minecraft.getInstance();
 
         client.execute(() -> {
+            //? if >=26.1 {
             if (client.player != null) {
                 client.player.sendSystemMessage(message);
             }
+            //?} else if >=1.21.2 {
+            /*client.gui.getChat().addMessage(message);
+            *///?} else if >=1.19 {
+            /*if (client.player != null) {
+                client.player.sendSystemMessage(message);
+            }
+            *///?} else {
+            /*client.gui.getChat().addMessage(message);
+            *///?}
         });
     }
 }

@@ -15,14 +15,24 @@ public class StreamChatBridgeNeoForge {
     public StreamChatBridgeNeoForge(IEventBus modBus) {
         StreamChatBridge.LOGGER.info("Stream Chat Bridge initialized");
 
-        if (FMLEnvironment.getDist() == Dist.CLIENT) {
-            modBus.addListener(StreamChatBridgeNeoForgeClient::onClientSetup);
-            modBus.addListener(StreamChatBridgeNeoForgeClient::onRegisterKeyMappings);
-
-            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientChat);
-            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onRegisterClientCommands);
-            NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientTick);
+        //? if >=1.21.9 {
+        /^if (FMLEnvironment.getDist() == Dist.CLIENT) {
+            registerClientListeners(modBus);
         }
+        ^///?} else {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            registerClientListeners(modBus);
+        }
+        //?}
+    }
+
+    private static void registerClientListeners(IEventBus modBus) {
+        modBus.addListener(StreamChatBridgeNeoForgeClient::onClientSetup);
+        modBus.addListener(StreamChatBridgeNeoForgeClient::onRegisterKeyMappings);
+
+        NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientChat);
+        NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onRegisterClientCommands);
+        NeoForge.EVENT_BUS.addListener(StreamChatBridgeNeoForgeClient::onClientTick);
     }
 }
 *///?}

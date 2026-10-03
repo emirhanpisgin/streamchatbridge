@@ -33,7 +33,7 @@ public final class ConfigManager {
         try {
             String json = Files.readString(CONFIG_PATH);
 
-            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            JsonObject root = new JsonParser().parse(json).getAsJsonObject();
 
             boolean legacyConfig = isLegacyConfig(root);
 

@@ -6,16 +6,16 @@ import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.kick.KickAuth;
 import com.kryp.streamchatbridge.minecraft.MinecraftChatBridge;
 import com.kryp.streamchatbridge.util.BrowserUtils;
+import com.kryp.streamchatbridge.util.ScbText;
 import com.kryp.streamchatbridge.util.Threads;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class KickSettingsScreen extends Screen {
+public final class KickSettingsScreen extends ScbScreen {
 
     private static final String DEVELOPER_URL = "https://dev.kick.com/";
 
@@ -44,7 +44,7 @@ public final class KickSettingsScreen extends Screen {
     private boolean channelChangeInProgress;
 
     public KickSettingsScreen(Screen parent) {
-        super(Component.literal("Kick Settings"));
+        super(ScbText.literal("Kick Settings"));
 
         this.parent = parent;
     }
@@ -76,16 +76,16 @@ public final class KickSettingsScreen extends Screen {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 
-        addRenderableWidget(Button.builder(
-                Component.literal("Open Kick Developer Portal"),
+        addRenderableWidget(ScbButton.builder(
+                ScbText.literal("Open Kick Developer Portal"),
                 button -> {
                     BrowserUtils.open(DEVELOPER_URL);
                     release(button);
                 }
         ).bounds(left, 82, contentWidth, 20).build());
 
-        addRenderableWidget(Button.builder(
-                Component.literal("Copy Redirect URL"),
+        addRenderableWidget(ScbButton.builder(
+                ScbText.literal("Copy Redirect URL"),
                 button -> {
                     Minecraft.getInstance()
                             .keyboardHandler
@@ -103,7 +103,7 @@ public final class KickSettingsScreen extends Screen {
                 279,
                 contentWidth,
                 20,
-                Component.literal("Client ID")
+                ScbText.literal("Client ID")
         );
 
         clientIdField.setValue(
@@ -122,23 +122,32 @@ public final class KickSettingsScreen extends Screen {
                 324,
                 contentWidth,
                 20,
-                Component.literal("Client Secret")
+                ScbText.literal("Client Secret")
         );
 
         clientSecretField.setValue("");
         clientSecretField.setMaxLength(512);
 
+        //? if >=1.21.9 {
         clientSecretField.addFormatter(
                 (text, position) ->
-                        Component.literal(
+                        ScbText.literal(
                                 "•".repeat(text.length())
                         ).getVisualOrderText()
         );
+        //?} else {
+        /*clientSecretField.setFormatter(
+                (text, position) ->
+                        ScbText.literal(
+                                "•".repeat(text.length())
+                        ).getVisualOrderText()
+        );
+        *///?}
 
         addRenderableWidget(clientSecretField);
 
-        addRenderableWidget(Button.builder(
-                Component.literal(
+        addRenderableWidget(ScbButton.builder(
+                ScbText.literal(
                         editingCredentials
                                 ? "Save Credentials"
                                 : "Save & Continue"
@@ -149,8 +158,8 @@ public final class KickSettingsScreen extends Screen {
                 }
         ).bounds(left, 360, 195, 20).build());
 
-        addRenderableWidget(Button.builder(
-                Component.literal("Back"),
+        addRenderableWidget(ScbButton.builder(
+                ScbText.literal("Back"),
                 button -> {
                     release(button);
 
@@ -158,7 +167,7 @@ public final class KickSettingsScreen extends Screen {
                         editingCredentials = false;
                         setupMode = false;
 
-                        rebuildWidgets();
+                        rebuild();
                     } else {
                         ScbScreens.open(parent);
                     }
@@ -166,8 +175,8 @@ public final class KickSettingsScreen extends Screen {
         ).bounds(left + 205, 360, 195, 20).build());
 
         if (editingCredentials) {
-            addRenderableWidget(Button.builder(
-                    Component.literal("Reset Kick App"),
+            addRenderableWidget(ScbButton.builder(
+                    ScbText.literal("Reset Kick App"),
                     button -> {
                         resetKickApp();
                         release(button);
@@ -186,7 +195,7 @@ public final class KickSettingsScreen extends Screen {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 
-        channelField = new EditBox(font, left, 70, contentWidth, 20, Component.literal("Channel"));
+        channelField = new EditBox(font, left, 70, contentWidth, 20, ScbText.literal("Channel"));
 
         channelField.setValue(config.kickChannel == null ? "" : config.kickChannel);
 
@@ -194,7 +203,7 @@ public final class KickSettingsScreen extends Screen {
 
         addRenderableWidget(channelField);
 
-        prefixField = new EditBox(font, left, 110, contentWidth, 20, Component.literal("Outgoing Prefix"));
+        prefixField = new EditBox(font, left, 110, contentWidth, 20, ScbText.literal("Outgoing Prefix"));
 
         prefixField.setValue(config.kickOutgoingPrefix == null ? "!k " : config.kickOutgoingPrefix);
 
@@ -202,7 +211,7 @@ public final class KickSettingsScreen extends Screen {
 
         addRenderableWidget(prefixField);
 
-        platformField = new EditBox(font, left, 150, contentWidth, 20, Component.literal("Platform Label"));
+        platformField = new EditBox(font, left, 150, contentWidth, 20, ScbText.literal("Platform Label"));
 
         platformField.setValue(config.kickIncomingPlatformLabel == null ? "Kick" : config.kickIncomingPlatformLabel);
 
@@ -210,7 +219,7 @@ public final class KickSettingsScreen extends Screen {
 
         addRenderableWidget(platformField);
 
-        formatField = new EditBox(font, left, 190, contentWidth, 20, Component.literal("Incoming Format"));
+        formatField = new EditBox(font, left, 190, contentWidth, 20, ScbText.literal("Incoming Format"));
 
         String format = config.kickIncomingMessageFormat;
 
@@ -223,7 +232,7 @@ public final class KickSettingsScreen extends Screen {
 
         addRenderableWidget(formatField);
 
-        addRenderableWidget(Button.builder(selectedColorText(), button -> {
+        addRenderableWidget(ScbButton.builder(selectedColorText(), button -> {
             selectedColorIndex++;
 
             if (selectedColorIndex >= COLORS.length) {
@@ -235,12 +244,12 @@ public final class KickSettingsScreen extends Screen {
             release(button);
         }).bounds(left, 225, 260, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Insert"), button -> {
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Insert"), button -> {
             insertSelectedColor();
             release(button);
         }).bounds(left + 270, 225, 130, 20).build());
 
-        addRenderableWidget(Button.builder(sendToggleText(), button -> {
+        addRenderableWidget(ScbButton.builder(sendToggleText(), button -> {
             config.kickSendEnabled = !config.kickSendEnabled;
 
             button.setMessage(sendToggleText());
@@ -250,19 +259,19 @@ public final class KickSettingsScreen extends Screen {
             release(button);
         }).bounds(left, 280, contentWidth, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("App Credentials"), button -> {
+        addRenderableWidget(ScbButton.builder(ScbText.literal("App Credentials"), button -> {
             openCredentialEditor();
             release(button);
         }).bounds(left, 315, contentWidth, 20).build());
 
-        saveButton = addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
+        saveButton = addRenderableWidget(ScbButton.builder(ScbText.literal("Save"), button -> {
             saveSettings();
             release(button);
         }).bounds(left, 350, 195, 20).build());
 
         saveButton.active = !channelChangeInProgress;
 
-        addRenderableWidget(Button.builder(Component.literal("Back"), button -> {
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Back"), button -> {
             saveSettings();
             release(button);
 
@@ -287,14 +296,14 @@ public final class KickSettingsScreen extends Screen {
 
         statusMessage = "Kick app credentials removed";
 
-        rebuildWidgets();
+        rebuild();
     }
 
     private void openCredentialEditor() {
         editingCredentials = true;
         setupMode = true;
 
-        rebuildWidgets();
+        rebuild();
     }
 
     /*
@@ -330,7 +339,7 @@ public final class KickSettingsScreen extends Screen {
             editingCredentials = false;
             setupMode = false;
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -346,7 +355,7 @@ public final class KickSettingsScreen extends Screen {
         editingCredentials = false;
         setupMode = false;
 
-        rebuildWidgets();
+        rebuild();
     }
 
     /*
@@ -501,19 +510,19 @@ public final class KickSettingsScreen extends Screen {
      */
 
     private Component sendToggleText() {
-        return Component.literal("Minecraft → Kick: " + (ConfigManager.get().kickSendEnabled ? "ON" : "OFF"));
+        return ScbText.literal("Minecraft → Kick: " + (ConfigManager.get().kickSendEnabled ? "ON" : "OFF"));
     }
 
     private Component selectedColorText() {
         ColorOption option = COLORS[selectedColorIndex];
 
-        Component value = Component.literal(option.name());
+        Component value = ScbText.literal(option.name());
 
         if (option.formatting() != null) {
             value = value.copy().withStyle(option.formatting());
         }
 
-        return Component.literal("Color: ").append(value);
+        return ScbText.literal("Color: ").append(value);
     }
 
     private void insertSelectedColor() {
@@ -529,7 +538,7 @@ public final class KickSettingsScreen extends Screen {
 
         formatField.setCursorPosition(cursor + option.tag().length());
 
-        formatField.setFocused(true);
+        takeFocus(formatField);
         setFocused(formatField);
     }
 
@@ -542,7 +551,7 @@ public final class KickSettingsScreen extends Screen {
     }
 
     private void release(Button button) {
-        button.setFocused(false);
+        releaseFocus(button);
 
         if (getFocused() == button) {
             setFocused(null);
@@ -563,9 +572,7 @@ public final class KickSettingsScreen extends Screen {
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(graphics, mouseX, mouseY, delta);
-
+    protected void renderContent(ScbGui graphics, int mouseX, int mouseY, float delta) {
         if (setupMode) {
             renderSetup(graphics);
         } else {
@@ -573,12 +580,12 @@ public final class KickSettingsScreen extends Screen {
         }
     }
 
-    private void renderSetup(GuiGraphicsExtractor graphics) {
+    private void renderSetup(ScbGui graphics) {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 
         Component setupTitle =
-                Component.literal(
+                ScbText.literal(
                         editingCredentials
                                 ? "Kick App Credentials"
                                 : "Kick Setup"
@@ -712,7 +719,7 @@ public final class KickSettingsScreen extends Screen {
         };
     }
 
-    private void renderSettings(GuiGraphicsExtractor graphics) {
+    private void renderSettings(ScbGui graphics) {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 

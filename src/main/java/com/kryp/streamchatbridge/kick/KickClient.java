@@ -196,7 +196,7 @@ public final class KickClient {
 
         JsonArray data = root.getAsJsonArray("data");
 
-        if (data.isEmpty()) {
+        if (data.size() == 0) {
             return null;
         }
 

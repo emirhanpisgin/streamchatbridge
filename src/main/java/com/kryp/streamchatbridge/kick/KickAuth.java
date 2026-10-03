@@ -258,7 +258,7 @@ public final class KickAuth {
 
             JsonObject root = GSON.fromJson(response.body(), JsonObject.class);
 
-            if (root == null || !root.has("data") || !root.get("data").isJsonArray() || root.getAsJsonArray("data").isEmpty()) {
+            if (root == null || !root.has("data") || !root.get("data").isJsonArray() || root.getAsJsonArray("data").size() == 0) {
 
                 return false;
             }

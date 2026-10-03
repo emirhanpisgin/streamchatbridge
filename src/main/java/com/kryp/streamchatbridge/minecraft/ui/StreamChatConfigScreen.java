@@ -8,13 +8,13 @@ import com.kryp.streamchatbridge.kick.KickClient;
 import com.kryp.streamchatbridge.twitch.TwitchAuth;
 import com.kryp.streamchatbridge.twitch.TwitchClient;
 import com.kryp.streamchatbridge.twitch.TwitchEventSubClient;
+import com.kryp.streamchatbridge.util.ScbText;
 import com.kryp.streamchatbridge.util.Threads;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class StreamChatConfigScreen extends Screen {
+public final class StreamChatConfigScreen extends ScbScreen {
 
     private final Screen parent;
 
@@ -24,7 +24,7 @@ public final class StreamChatConfigScreen extends Screen {
     private boolean kickAuthenticationInProgress = false;
 
     public StreamChatConfigScreen(Screen parent) {
-        super(Component.literal("Stream Chat Bridge"));
+        super(ScbText.literal("Stream Chat Bridge"));
 
         this.parent = parent;
     }
@@ -47,22 +47,22 @@ public final class StreamChatConfigScreen extends Screen {
         int bottomWidth = 300;
         int bottomLeft = width / 2 - bottomWidth / 2;
 
-        addRenderableWidget(Button.builder(Component.literal("Twitch Settings"), button -> {
-            button.setFocused(false);
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Twitch Settings"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             ScbScreens.open(new TwitchSettingsScreen(this));
         }).bounds(twitchLeft, 245, columnWidth, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Kick Settings"), button -> {
-            button.setFocused(false);
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Kick Settings"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             ScbScreens.open(new KickSettingsScreen(this));
         }).bounds(kickLeft, 245, columnWidth, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> {
-            button.setFocused(false);
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Close"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             ScbScreens.open(parent);
@@ -83,8 +83,8 @@ public final class StreamChatConfigScreen extends Screen {
         TwitchEventSubClient eventSub = StreamChatBridgeClient.getTwitchEventSub();
 
         if (!auth.isAuthenticated()) {
-            Button loginButton = Button.builder(Component.literal(twitchAuthenticationInProgress ? "Waiting for Twitch..." : "Log in with Twitch"), button -> {
-                button.setFocused(false);
+            Button loginButton = ScbButton.builder(ScbText.literal(twitchAuthenticationInProgress ? "Waiting for Twitch..." : "Log in with Twitch"), button -> {
+                releaseFocus(button);
                 setFocused(null);
 
                 twitchLogin();
@@ -97,8 +97,8 @@ public final class StreamChatConfigScreen extends Screen {
             return;
         }
 
-        Button connectionButton = Button.builder(twitchConnectionButtonText(), button -> {
-            button.setFocused(false);
+        Button connectionButton = ScbButton.builder(twitchConnectionButtonText(), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             TwitchEventSubClient.ConnectionState state = eventSub.getConnectionState();
@@ -117,8 +117,8 @@ public final class StreamChatConfigScreen extends Screen {
 
         addRenderableWidget(connectionButton);
 
-        Button disconnectButton = Button.builder(Component.literal("Disconnect"), button -> {
-            button.setFocused(false);
+        Button disconnectButton = ScbButton.builder(ScbText.literal("Disconnect"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             eventSub.disconnect();
@@ -128,8 +128,8 @@ public final class StreamChatConfigScreen extends Screen {
 
         addRenderableWidget(disconnectButton);
 
-        addRenderableWidget(Button.builder(Component.literal("Log Out"), button -> {
-            button.setFocused(false);
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Log Out"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             twitchLogout();
@@ -146,8 +146,8 @@ public final class StreamChatConfigScreen extends Screen {
         KickChatClient chat = StreamChatBridgeClient.getKickChat();
 
         if (!auth.hasClientCredentials()) {
-            addRenderableWidget(Button.builder(Component.literal("Set Up Kick"), button -> {
-                button.setFocused(false);
+            addRenderableWidget(ScbButton.builder(ScbText.literal("Set Up Kick"), button -> {
+                releaseFocus(button);
                 setFocused(null);
 
                 ScbScreens.open(new KickSettingsScreen(this));
@@ -157,8 +157,8 @@ public final class StreamChatConfigScreen extends Screen {
         }
 
         if (!auth.isAuthenticated()) {
-            Button loginButton = Button.builder(Component.literal(kickAuthenticationInProgress ? "Waiting for Kick..." : "Log in with Kick"), button -> {
-                button.setFocused(false);
+            Button loginButton = ScbButton.builder(ScbText.literal(kickAuthenticationInProgress ? "Waiting for Kick..." : "Log in with Kick"), button -> {
+                releaseFocus(button);
                 setFocused(null);
 
                 kickLogin();
@@ -171,8 +171,8 @@ public final class StreamChatConfigScreen extends Screen {
             return;
         }
 
-        Button connectionButton = Button.builder(kickConnectionButtonText(), button -> {
-            button.setFocused(false);
+        Button connectionButton = ScbButton.builder(kickConnectionButtonText(), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             KickChatClient.ConnectionState state = chat.getConnectionState();
@@ -191,8 +191,8 @@ public final class StreamChatConfigScreen extends Screen {
 
         addRenderableWidget(connectionButton);
 
-        Button disconnectButton = Button.builder(Component.literal("Disconnect"), button -> {
-            button.setFocused(false);
+        Button disconnectButton = ScbButton.builder(ScbText.literal("Disconnect"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             chat.disconnect();
@@ -202,8 +202,8 @@ public final class StreamChatConfigScreen extends Screen {
 
         addRenderableWidget(disconnectButton);
 
-        addRenderableWidget(Button.builder(Component.literal("Log Out"), button -> {
-            button.setFocused(false);
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Log Out"), button -> {
+            releaseFocus(button);
             setFocused(null);
 
             kickLogout();
@@ -217,7 +217,7 @@ public final class StreamChatConfigScreen extends Screen {
     private Component twitchConnectionButtonText() {
         TwitchEventSubClient.ConnectionState state = StreamChatBridgeClient.getTwitchEventSub().getConnectionState();
 
-        return Component.literal(switch (state) {
+        return ScbText.literal(switch (state) {
             case CONNECTED -> "Reconnect to Twitch";
 
             case CONNECTING -> "Connecting...";
@@ -237,7 +237,7 @@ public final class StreamChatConfigScreen extends Screen {
 
         statusMessage = "Waiting for Twitch authorization...";
 
-        rebuildWidgets();
+        rebuild();
 
         Threads.start("streamchatbridge-twitch-login", () -> {
             boolean authenticated = auth.authenticate();
@@ -252,7 +252,7 @@ public final class StreamChatConfigScreen extends Screen {
                 if (!authenticated) {
                     statusMessage = "Twitch authentication failed";
 
-                    rebuildWidgets();
+                    rebuild();
 
                     return;
                 }
@@ -261,7 +261,7 @@ public final class StreamChatConfigScreen extends Screen {
 
                 prepareTwitchAccount();
 
-                rebuildWidgets();
+                rebuild();
             });
         });
     }
@@ -279,7 +279,7 @@ public final class StreamChatConfigScreen extends Screen {
                     minecraft.execute(() -> {
                         statusMessage = "Could not select Twitch channel";
 
-                        rebuildWidgets();
+                        rebuild();
                     });
                 }
 
@@ -302,7 +302,7 @@ public final class StreamChatConfigScreen extends Screen {
 
         statusMessage = "Logged out of Twitch";
 
-        rebuildWidgets();
+        rebuild();
     }
 
     private void twitchConnect() {
@@ -315,7 +315,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (!auth.isAuthenticated()) {
             statusMessage = "Twitch account is not authenticated";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -323,7 +323,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (twitchClient.getChannelId() == null) {
             statusMessage = "No Twitch channel selected";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -343,7 +343,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (!auth.isAuthenticated()) {
             statusMessage = "Twitch account is not authenticated";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -351,7 +351,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (twitchClient.getChannelId() == null) {
             statusMessage = "No Twitch channel selected";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -375,7 +375,7 @@ public final class StreamChatConfigScreen extends Screen {
                 case DISCONNECTED -> "Twitch disconnected";
             };
 
-            rebuildWidgets();
+            rebuild();
         });
     }
 
@@ -386,7 +386,7 @@ public final class StreamChatConfigScreen extends Screen {
     private Component kickConnectionButtonText() {
         KickChatClient.ConnectionState state = StreamChatBridgeClient.getKickChat().getConnectionState();
 
-        return Component.literal(switch (state) {
+        return ScbText.literal(switch (state) {
             case CONNECTED -> "Reconnect to Kick";
 
             case CONNECTING -> "Connecting...";
@@ -405,7 +405,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (!auth.hasClientCredentials()) {
             statusMessage = "Configure Kick credentials first";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -414,7 +414,7 @@ public final class StreamChatConfigScreen extends Screen {
 
         statusMessage = "Waiting for Kick authorization...";
 
-        rebuildWidgets();
+        rebuild();
 
         Threads.start("streamchatbridge-kick-login", () -> {
             boolean authenticated = auth.authenticate();
@@ -429,14 +429,14 @@ public final class StreamChatConfigScreen extends Screen {
                 if (!authenticated) {
                     statusMessage = "Kick authentication failed";
 
-                    rebuildWidgets();
+                    rebuild();
 
                     return;
                 }
 
                 statusMessage = "Logged in to Kick as " + auth.getUsername();
 
-                rebuildWidgets();
+                rebuild();
 
                 kickConnect();
             });
@@ -453,7 +453,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (!auth.isAuthenticated()) {
             statusMessage = "Kick account is not authenticated";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -471,7 +471,7 @@ public final class StreamChatConfigScreen extends Screen {
         if (channel == null || channel.isBlank()) {
             statusMessage = "No Kick channel selected";
 
-            rebuildWidgets();
+            rebuild();
 
             return;
         }
@@ -490,7 +490,7 @@ public final class StreamChatConfigScreen extends Screen {
                     minecraft.execute(() -> {
                         statusMessage = "Could not load Kick channel";
 
-                        rebuildWidgets();
+                        rebuild();
                     });
                 }
 
@@ -503,7 +503,7 @@ public final class StreamChatConfigScreen extends Screen {
                 minecraft.execute(() -> {
                     statusMessage = "Could not connect to Kick chat";
 
-                    rebuildWidgets();
+                    rebuild();
                 });
             }
         });
@@ -530,7 +530,7 @@ public final class StreamChatConfigScreen extends Screen {
 
         statusMessage = "Logged out of Kick";
 
-        rebuildWidgets();
+        rebuild();
     }
 
     private void kickConnectionStateChanged(KickChatClient.ConnectionState state) {
@@ -547,7 +547,7 @@ public final class StreamChatConfigScreen extends Screen {
                 case DISCONNECTED -> "Kick disconnected";
             };
 
-            rebuildWidgets();
+            rebuild();
         });
     }
 
@@ -662,9 +662,7 @@ public final class StreamChatConfigScreen extends Screen {
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(graphics, mouseX, mouseY, delta);
-
+    protected void renderContent(ScbGui graphics, int mouseX, int mouseY, float delta) {
         int totalWidth = 400;
         int columnWidth = 180;
         int gap = 40;

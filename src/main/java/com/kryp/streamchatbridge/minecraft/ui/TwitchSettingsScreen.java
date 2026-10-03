@@ -5,17 +5,17 @@ import com.kryp.streamchatbridge.config.ConfigManager;
 import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.minecraft.MinecraftChatBridge;
 import com.kryp.streamchatbridge.twitch.TwitchAuth;
+import com.kryp.streamchatbridge.util.ScbText;
 import com.kryp.streamchatbridge.util.Threads;
 import com.kryp.streamchatbridge.twitch.TwitchClient;
 import com.kryp.streamchatbridge.twitch.TwitchEventSubClient;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class TwitchSettingsScreen extends Screen {
+public final class TwitchSettingsScreen extends ScbScreen {
 
     private static final ColorOption[] COLORS = {new ColorOption("Reset", "<reset>", null), new ColorOption("White", "<white>", ChatFormatting.WHITE), new ColorOption("Gray", "<gray>", ChatFormatting.GRAY), new ColorOption("Dark Gray", "<dark_gray>", ChatFormatting.DARK_GRAY), new ColorOption("Black", "<black>", ChatFormatting.BLACK), new ColorOption("Red", "<red>", ChatFormatting.RED), new ColorOption("Dark Red", "<dark_red>", ChatFormatting.DARK_RED), new ColorOption("Gold", "<gold>", ChatFormatting.GOLD), new ColorOption("Yellow", "<yellow>", ChatFormatting.YELLOW), new ColorOption("Green", "<green>", ChatFormatting.GREEN), new ColorOption("Dark Green", "<dark_green>", ChatFormatting.DARK_GREEN), new ColorOption("Aqua", "<aqua>", ChatFormatting.AQUA), new ColorOption("Dark Aqua", "<dark_aqua>", ChatFormatting.DARK_AQUA), new ColorOption("Blue", "<blue>", ChatFormatting.BLUE), new ColorOption("Dark Blue", "<dark_blue>", ChatFormatting.DARK_BLUE), new ColorOption("Light Purple", "<light_purple>", ChatFormatting.LIGHT_PURPLE), new ColorOption("Dark Purple", "<dark_purple>", ChatFormatting.DARK_PURPLE)};
 
@@ -37,7 +37,7 @@ public final class TwitchSettingsScreen extends Screen {
     private boolean channelChangeInProgress;
 
     public TwitchSettingsScreen(Screen parent) {
-        super(Component.literal("Twitch Settings"));
+        super(ScbText.literal("Twitch Settings"));
 
         this.parent = parent;
     }
@@ -49,7 +49,7 @@ public final class TwitchSettingsScreen extends Screen {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 
-        channelField = new EditBox(font, left, 60, contentWidth, 20, Component.literal("Channel"));
+        channelField = new EditBox(font, left, 60, contentWidth, 20, ScbText.literal("Channel"));
 
         channelField.setValue(config.twitchChannel == null ? "" : config.twitchChannel);
 
@@ -57,7 +57,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         addRenderableWidget(channelField);
 
-        prefixField = new EditBox(font, left, 105, contentWidth, 20, Component.literal("Outgoing Prefix"));
+        prefixField = new EditBox(font, left, 105, contentWidth, 20, ScbText.literal("Outgoing Prefix"));
 
         prefixField.setValue(config.twitchOutgoingPrefix == null ? "!t " : config.twitchOutgoingPrefix);
 
@@ -65,7 +65,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         addRenderableWidget(prefixField);
 
-        platformField = new EditBox(font, left, 150, contentWidth, 20, Component.literal("Platform Label"));
+        platformField = new EditBox(font, left, 150, contentWidth, 20, ScbText.literal("Platform Label"));
 
         platformField.setValue(config.twitchIncomingPlatformLabel == null ? "Twitch" : config.twitchIncomingPlatformLabel);
 
@@ -73,7 +73,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         addRenderableWidget(platformField);
 
-        formatField = new EditBox(font, left, 195, contentWidth, 20, Component.literal("Incoming Format"));
+        formatField = new EditBox(font, left, 195, contentWidth, 20, ScbText.literal("Incoming Format"));
 
         String format = config.twitchIncomingMessageFormat;
 
@@ -86,7 +86,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         addRenderableWidget(formatField);
 
-        colorButton = addRenderableWidget(Button.builder(selectedColorText(), button -> {
+        colorButton = addRenderableWidget(ScbButton.builder(selectedColorText(), button -> {
             selectedColorIndex++;
 
             if (selectedColorIndex >= COLORS.length) {
@@ -98,13 +98,13 @@ public final class TwitchSettingsScreen extends Screen {
             release(button);
         }).bounds(left, 230, 260, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Insert"), button -> {
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Insert"), button -> {
             insertSelectedColor();
 
             release(button);
         }).bounds(left + 270, 230, 130, 20).build());
 
-        sendToggleButton = addRenderableWidget(Button.builder(sendToggleText(), button -> {
+        sendToggleButton = addRenderableWidget(ScbButton.builder(sendToggleText(), button -> {
             config.twitchSendEnabled = !config.twitchSendEnabled;
 
             button.setMessage(sendToggleText());
@@ -112,7 +112,7 @@ public final class TwitchSettingsScreen extends Screen {
             release(button);
         }).bounds(left, 285, contentWidth, 20).build());
 
-        saveButton = addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
+        saveButton = addRenderableWidget(ScbButton.builder(ScbText.literal("Save"), button -> {
             save();
 
             release(button);
@@ -120,7 +120,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         saveButton.active = !channelChangeInProgress;
 
-        addRenderableWidget(Button.builder(Component.literal("Back"), button -> {
+        addRenderableWidget(ScbButton.builder(ScbText.literal("Back"), button -> {
             save();
 
             release(button);
@@ -130,19 +130,19 @@ public final class TwitchSettingsScreen extends Screen {
     }
 
     private Component sendToggleText() {
-        return Component.literal("Minecraft → Twitch: " + (ConfigManager.get().twitchSendEnabled ? "ON" : "OFF"));
+        return ScbText.literal("Minecraft → Twitch: " + (ConfigManager.get().twitchSendEnabled ? "ON" : "OFF"));
     }
 
     private Component selectedColorText() {
         ColorOption option = COLORS[selectedColorIndex];
 
-        Component value = Component.literal(option.name());
+        Component value = ScbText.literal(option.name());
 
         if (option.formatting() != null) {
             value = value.copy().withStyle(option.formatting());
         }
 
-        return Component.literal("Color: ").append(value);
+        return ScbText.literal("Color: ").append(value);
     }
 
     private void insertSelectedColor() {
@@ -158,7 +158,7 @@ public final class TwitchSettingsScreen extends Screen {
 
         formatField.setCursorPosition(cursor + option.tag().length());
 
-        formatField.setFocused(true);
+        takeFocus(formatField);
         setFocused(formatField);
     }
 
@@ -277,7 +277,7 @@ public final class TwitchSettingsScreen extends Screen {
     }
 
     private void release(Button button) {
-        button.setFocused(false);
+        releaseFocus(button);
 
         if (getFocused() == button) {
             setFocused(null);
@@ -307,9 +307,7 @@ public final class TwitchSettingsScreen extends Screen {
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(graphics, mouseX, mouseY, delta);
-
+    protected void renderContent(ScbGui graphics, int mouseX, int mouseY, float delta) {
         int contentWidth = 400;
         int left = width / 2 - contentWidth / 2;
 

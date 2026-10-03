@@ -1,6 +1,10 @@
 package com.kryp.streamchatbridge.util;
 
+//? if >=1.21.11 {
 import net.minecraft.util.Util;
+//?} else {
+/*import net.minecraft.Util;
+*///?}
 
 import java.net.URI;
 
@@ -15,7 +19,11 @@ public final class BrowserUtils {
         }
 
         try {
+            //? if >=26.3 {
+            /*com.mojang.blaze3d.Blaze3D.openUri(URI.create(url));
+            *///?} else {
             Util.getPlatform().openUri(URI.create(url));
+            //?}
 
             return true;
 

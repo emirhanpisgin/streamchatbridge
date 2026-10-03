@@ -82,7 +82,7 @@ public final class TwitchClient {
 
             JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
 
-            if (json.has("data") && !json.getAsJsonArray("data").isEmpty()) {
+            if (json.has("data") && json.getAsJsonArray("data").size() > 0) {
 
                 JsonObject result = json.getAsJsonArray("data").get(0).getAsJsonObject();
 
