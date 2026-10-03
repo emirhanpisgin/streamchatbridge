@@ -56,6 +56,11 @@ minecraft {
     runs {
         configureEach {
             workingDir.convention(rootProject.layout.projectDirectory.dir("run"))
+
+            // Test hook: `-PscbQuickPlay=<worldFolder>` jumps straight into a world.
+            if (project.hasProperty("scbQuickPlay")) {
+                args("--quickPlaySingleplayer", project.property("scbQuickPlay") as String)
+            }
             // The Slime launcher reflectively invokes BootstrapLauncher.main;
             // JDK 17+ module access requires this opening.
             jvmArgs("--add-opens", "java.base/java.lang.invoke=ALL-UNNAMED")

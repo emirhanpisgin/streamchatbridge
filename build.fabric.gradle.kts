@@ -43,6 +43,11 @@ loom {
         preferGradleTask = true
         generateRunConfig = true
         runDirectory = rootProject.file("run") // Shares the run directory between versions
+
+        // Test hook: `-PscbQuickPlay=<worldFolder>` jumps straight into a world.
+        if (project.hasProperty("scbQuickPlay")) {
+            programArgs("--quickPlaySingleplayer", project.property("scbQuickPlay") as String)
+        }
     }
 }
 

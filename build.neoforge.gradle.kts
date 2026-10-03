@@ -38,6 +38,12 @@ neoForge {
     runs {
         create("client") {
             client()
+
+            // Test hook: `-PscbQuickPlay=<worldFolder>` jumps straight into a world.
+            if (project.hasProperty("scbQuickPlay")) {
+                programArgument("--quickPlaySingleplayer")
+                programArgument(project.property("scbQuickPlay") as String)
+            }
         }
         create("server") {
             server()

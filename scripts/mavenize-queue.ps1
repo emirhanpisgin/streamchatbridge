@@ -1,31 +1,48 @@
 #requires -Version 7.0
 <#
-    Mavenize queue: pre-decompiles the Minecraft artifacts for every declared node
-    by running `:<node>:compileJava` sequentially.
+    Node queue: compiles every declared node (pre-warming decompiles) and can
+    optionally launch each node's dev client to smoke-test it.
 
-    The first build of a node takes 1-15 minutes (Loom / ForgeGradle / NeoFormRuntime
-    decompile); afterwards the caches make builds fast. Run this unattached via
-    scripts/launch-mavenize-queue.cmd and let it work in the background.
+    Phases per node:
+      1. compileJava          - finds API/era breaks, no game window.
+      2. runClient (-Launch)  - starts the client, waits until the mod client entry
+                                point ran and the title screen is up, then kills it.
+                                This proves the loader metadata/mixins/classloading
+                                work; it does not join a world.
+
+    Run unattached via scripts/launch-mavenize-queue.cmd and let it work in the
+    background. Runs are strictly sequential (Gradle project locks).
 
     Examples:
         pwsh -File scripts/mavenize-queue.ps1 -ListOnly
-        pwsh -File scripts/mavenize-queue.ps1
-        pwsh -File scripts/mavenize-queue.ps1 -Loaders neoforge -TimeoutMinutes 45
+        pwsh -File scripts/mavenize-queue.ps1 -Loaders neoforge
+        pwsh -File scripts/mavenize-queue.ps1 -Launch -From 1.20.4 -To 26.1
+        pwsh -File scripts/mavenize-queue.ps1 -Nodes 26.2-fabric,26.1-forge -Launch
 #>
 param(
     [string[]]$Nodes = @(),
     [ValidateSet("fabric", "forge", "neoforge")][string[]]$Loaders = @(),
+    [string]$From = "",
+    [string]$To = "",
+    [string[]]$Exclude = @(),
     [string]$BuildJdk = "",
     [switch]$NoRetry,
     [switch]$SkipMinecraftPause,
     [switch]$ListOnly,
-    [int]$TimeoutMinutes = 60
+    [switch]$Launch,
+    [int]$TimeoutMinutes = 60,
+    [int]$LaunchTimeoutMinutes = 6
 )
 
 $ErrorActionPreference = "Continue"
 $Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 $SettingsPath = Join-Path $Root "settings.gradle.kts"
+
+# Allow comma-separated values in the list parameters.
+$Nodes = @($Nodes | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
+$Loaders = @($Loaders | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
+$Exclude = @($Exclude | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
 $LogPath = Join-Path $Root "build\mavenize-queue.log"
 New-Item -ItemType Directory -Force -Path (Join-Path $Root "build") | Out-Null
 
@@ -63,6 +80,26 @@ function Get-DeclaredNodes {
         }
     }
     return $result
+}
+
+function Compare-McVersion {
+    param([string]$Left, [string]$Right)
+    $a = @($Left -split '\.' | ForEach-Object { [int]($_ -replace '[^0-9].*$', '') })
+    $b = @($Right -split '\.' | ForEach-Object { [int]($_ -replace '[^0-9].*$', '') })
+    for ($i = 0; $i -lt [Math]::Max($a.Count, $b.Count); $i++) {
+        $x = if ($i -lt $a.Count) { $a[$i] } else { 0 }
+        $y = if ($i -lt $b.Count) { $b[$i] } else { 0 }
+        if ($x -ne $y) { return $x - $y }
+    }
+    return 0
+}
+
+function Get-FirstFailure {
+    param([string]$File)
+    if (-not (Test-Path $File)) { return "" }
+    $hit = Select-String -Path $File -Pattern "error:|Caused by:|FAILED TO BIND|Exception" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($hit) { return $hit.Line.Trim() }
+    return ""
 }
 
 function Wait-ForMinecraftWindow {
@@ -109,18 +146,61 @@ function Invoke-NodeBuild {
     return ($p.ExitCode -eq 0)
 }
 
+function Invoke-NodeLaunch {
+    param([string]$Node, [string]$Loader, [string]$NodeLog, [int]$TimeoutMinutes)
+    $gameLog = if ($Loader -eq "neoforge") { Join-Path $Root "versions\$Node\run\logs\latest.log" } else { Join-Path $Root "run\logs\latest.log" }
+    Remove-Item -LiteralPath $gameLog -Force -ErrorAction SilentlyContinue
+
+    $gradleArgs = @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "--console=plain")
+    $p = Start-Process -FilePath (Join-Path $Root "gradlew.bat") -ArgumentList $gradleArgs -WorkingDirectory $Root `
+        -RedirectStandardOutput $NodeLog -RedirectStandardError "$NodeLog.err" -PassThru -WindowStyle Hidden
+
+    $modLoaded = $false
+    $titleScreen = $false
+    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+    while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 4
+        if (-not $modLoaded -and (Test-Path $NodeLog)) {
+            if (Select-String -Path $NodeLog -Pattern "\[Stream Chat Bridge\] Loaded" -Quiet -ErrorAction SilentlyContinue) {
+                $modLoaded = $true
+                Write-Log "    mod client initialized" "DIM"
+            }
+        }
+        if (-not $titleScreen -and (Test-Path $gameLog)) {
+            if (Select-String -Path $gameLog -Pattern "Sound engine started|OpenAL initialized" -Quiet -ErrorAction SilentlyContinue) {
+                $titleScreen = $true
+            }
+        }
+        if ($modLoaded -and $titleScreen) { break }
+    }
+
+    $timedOut = ((Get-Date) -ge $deadline)
+    if (-not $p.HasExited) { & taskkill /PID $p.Id /T /F 2>$null | Out-Null }
+    Start-Sleep -Seconds 2
+
+    if ($timedOut) {
+        Write-Log "    launch timed out after $TimeoutMinutes minutes" "ERROR"
+        return $false
+    }
+    return ($modLoaded -and $titleScreen)
+}
+
 # ------------------------------------------------------------------- main ----
 $allNodes = @(Get-DeclaredNodes)
 $queue = @($allNodes | Where-Object {
     ($Nodes.Count -eq 0 -or $Nodes -contains $_.Node) -and
-    ($Loaders.Count -eq 0 -or $Loaders -contains $_.Loader)
+    ($Loaders.Count -eq 0 -or $Loaders -contains $_.Loader) -and
+    ($From -eq "" -or (Compare-McVersion $_.Mc $From) -ge 0) -and
+    ($To -eq "" -or (Compare-McVersion $_.Mc $To) -le 0) -and
+    ($Exclude -notcontains $_.Node)
 })
 
 Write-Host ""
 Write-Host ("  " + ("=" * 74)) -ForegroundColor DarkMagenta
-Write-Host "   Mavenize queue - pre-decompile every declared node" -ForegroundColor Magenta
+Write-Host "   Node queue - compile (and optionally launch) every declared node" -ForegroundColor Magenta
 Write-Host ("  " + ("=" * 74)) -ForegroundColor DarkMagenta
 Write-Log "build JDK: $BuildJdk"
+Write-Log "mode: $(if ($Launch) { 'compile + launch' } else { 'compile' })"
 Write-Log "nodes: $($queue.Count) of $($allNodes.Count) declared"
 
 if ($ListOnly) {
@@ -149,21 +229,34 @@ foreach ($entry in $queue) {
         $ok = Invoke-NodeBuild -Node $entry.Node -NodeLog $nodeLog -TimeoutMinutes $TimeoutMinutes
     }
 
+    $launchOk = $null
+    $errorLine = ""
+    if ($ok -and $Launch) {
+        $launchLog = Join-Path $Root "build\mavenize-$($entry.Node)-launch.log"
+        Write-Log "    launching client..." "DIM"
+        $launchOk = Invoke-NodeLaunch -Node $entry.Node -Loader $entry.Loader -NodeLog $launchLog -TimeoutMinutes $LaunchTimeoutMinutes
+        if (-not $launchOk) { $errorLine = Get-FirstFailure "$launchLog.err" }
+    } elseif (-not $ok) {
+        $errorLine = Get-FirstFailure $nodeLog
+    }
+
     $sw.Stop()
-    if ($ok) {
+    if ($ok -and ($launchOk -ne $false)) {
         Write-Log ("done in {0:hh\:mm\:ss}" -f $sw.Elapsed) "OK"
     } else {
-        Write-Log ("FAILED in {0:hh\:mm\:ss} - see build\mavenize-$($entry.Node).log" -f $sw.Elapsed) "ERROR"
+        Write-Log ("FAILED in {0:hh\:mm\:ss} - see build\mavenize-$($entry.Node)*.log" -f $sw.Elapsed) "ERROR"
     }
-    $results += [pscustomobject]@{ Node = $entry.Node; Ok = $ok; Elapsed = $sw.Elapsed }
+    $results += [pscustomobject]@{ Node = $entry.Node; Compile = $ok; Launch = $launchOk; Error = $errorLine; Elapsed = $sw.Elapsed }
 }
 
 $total.Stop()
 Write-Host ""
 Write-Host ("  " + ("=" * 74)) -ForegroundColor DarkMagenta
-$okCount = @($results | Where-Object { $_.Ok }).Count
+$okCount = @($results | Where-Object { $_.Compile -and ($_.Launch -ne $false) }).Count
 Write-Log ("queue complete: {0} ok, {1} failed, total {2:hh\:mm\:ss}" -f $okCount, ($results.Count - $okCount), $total.Elapsed) $(if ($okCount -eq $results.Count) { "OK" } else { "ERROR" })
 foreach ($r in $results) {
-    Write-Log ("  {0,-18} {1}" -f $r.Node, $(if ($r.Ok) { "ok" } else { "FAILED" })) $(if ($r.Ok) { "OK" } else { "ERROR" })
+    $verdict = if (-not $r.Compile) { "compile-fail" } elseif ($r.Launch -eq $false) { "launch-fail" } elseif ($r.Launch -eq $true) { "ok (built+launched)" } else { "ok (built)" }
+    Write-Log ("  {0,-18} {1}" -f $r.Node, $verdict) $(if ($verdict -like "ok*") { "OK" } else { "ERROR" })
+    if ($r.Error) { Write-Log ("      " + $r.Error) "DIM" }
 }
 Write-Log "full log: $LogPath" "DIM"
