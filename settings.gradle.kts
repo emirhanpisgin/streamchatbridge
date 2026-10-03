@@ -54,29 +54,14 @@ stonecutter {
         match("1.17.1", "forge")
         // TRAVERSAL-END 1.17.1-forge
 
-        // TRAVERSAL-BEGIN 1.18-forge
-        match("1.18", "forge")
-        // TRAVERSAL-END 1.18-forge
 
-        // TRAVERSAL-BEGIN 1.18.1-forge
-        match("1.18.1", "forge")
-        // TRAVERSAL-END 1.18.1-forge
 
-        // TRAVERSAL-BEGIN 1.18.2-forge
-        match("1.18.2", "forge")
-        // TRAVERSAL-END 1.18.2-forge
 
         // TRAVERSAL-BEGIN 1.19-forge
         match("1.19", "forge")
         // TRAVERSAL-END 1.19-forge
 
-        // TRAVERSAL-BEGIN 1.19.1-forge
-        match("1.19.1", "forge")
-        // TRAVERSAL-END 1.19.1-forge
 
-        // TRAVERSAL-BEGIN 1.19.2-forge
-        match("1.19.2", "forge")
-        // TRAVERSAL-END 1.19.2-forge
 
         // TRAVERSAL-BEGIN 1.19.3-forge
         match("1.19.3", "forge")
@@ -90,77 +75,38 @@ stonecutter {
         match("1.20", "forge")
         // TRAVERSAL-END 1.20-forge
 
-        // TRAVERSAL-BEGIN 1.20.1-forge
-        match("1.20.1", "forge")
-        // TRAVERSAL-END 1.20.1-forge
 
-        // TRAVERSAL-BEGIN 1.20.2-forge
-        match("1.20.2", "forge")
-        // TRAVERSAL-END 1.20.2-forge
 
-        // TRAVERSAL-BEGIN 1.20.3-forge
-        match("1.20.3", "forge")
-        // TRAVERSAL-END 1.20.3-forge
 
-        // TRAVERSAL-BEGIN 1.20.4-forge
-        match("1.20.4", "forge")
-        // TRAVERSAL-END 1.20.4-forge
 
-        // TRAVERSAL-BEGIN 1.20.6-forge
-        match("1.20.6", "forge")
-        // TRAVERSAL-END 1.20.6-forge
 
         // TRAVERSAL-BEGIN 1.21-forge
         match("1.21", "forge")
         // TRAVERSAL-END 1.21-forge
 
-        // TRAVERSAL-BEGIN 1.21.1-forge
-        match("1.21.1", "forge")
-        // TRAVERSAL-END 1.21.1-forge
 
         // TRAVERSAL-BEGIN 1.21.3-forge
         match("1.21.3", "forge")
         // TRAVERSAL-END 1.21.3-forge
 
-        // TRAVERSAL-BEGIN 1.21.4-forge
-        match("1.21.4", "forge")
-        // TRAVERSAL-END 1.21.4-forge
 
-        // TRAVERSAL-BEGIN 1.21.5-forge
-        match("1.21.5", "forge")
-        // TRAVERSAL-END 1.21.5-forge
 
         // TRAVERSAL-BEGIN 1.21.6-forge
         match("1.21.6", "forge")
         // TRAVERSAL-END 1.21.6-forge
 
-        // TRAVERSAL-BEGIN 1.21.7-forge
-        match("1.21.7", "forge")
-        // TRAVERSAL-END 1.21.7-forge
 
-        // TRAVERSAL-BEGIN 1.21.8-forge
-        match("1.21.8", "forge")
-        // TRAVERSAL-END 1.21.8-forge
 
         // TRAVERSAL-BEGIN 1.21.9-forge
         match("1.21.9", "forge")
         // TRAVERSAL-END 1.21.9-forge
 
-        // TRAVERSAL-BEGIN 1.21.10-forge
-        match("1.21.10", "forge")
-        // TRAVERSAL-END 1.21.10-forge
 
         // TRAVERSAL-BEGIN 1.21.11-forge
         match("1.21.11", "forge")
         // TRAVERSAL-END 1.21.11-forge
 
-        // TRAVERSAL-BEGIN 26.1.1-forge
-        match("26.1.1", "forge")
-        // TRAVERSAL-END 26.1.1-forge
 
-        // TRAVERSAL-BEGIN 26.1.2-forge
-        match("26.1.2", "forge")
-        // TRAVERSAL-END 26.1.2-forge
 
         // TRAVERSAL-BEGIN 26.2-forge
         match("26.2", "forge")
@@ -182,57 +128,27 @@ stonecutter {
         match("1.21", "neoforge")
         // TRAVERSAL-END 1.21-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.1-neoforge
-        match("1.21.1", "neoforge")
-        // TRAVERSAL-END 1.21.1-neoforge
 
         // TRAVERSAL-BEGIN 1.21.2-neoforge
         match("1.21.2", "neoforge")
         // TRAVERSAL-END 1.21.2-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.3-neoforge
-        match("1.21.3", "neoforge")
-        // TRAVERSAL-END 1.21.3-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.4-neoforge
-        match("1.21.4", "neoforge")
-        // TRAVERSAL-END 1.21.4-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.5-neoforge
-        match("1.21.5", "neoforge")
-        // TRAVERSAL-END 1.21.5-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.6-neoforge
-        match("1.21.6", "neoforge")
-        // TRAVERSAL-END 1.21.6-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.7-neoforge
-        match("1.21.7", "neoforge")
-        // TRAVERSAL-END 1.21.7-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.8-neoforge
-        match("1.21.8", "neoforge")
-        // TRAVERSAL-END 1.21.8-neoforge
 
         // TRAVERSAL-BEGIN 1.21.9-neoforge
         match("1.21.9", "neoforge")
         // TRAVERSAL-END 1.21.9-neoforge
 
-        // TRAVERSAL-BEGIN 1.21.10-neoforge
-        match("1.21.10", "neoforge")
-        // TRAVERSAL-END 1.21.10-neoforge
 
         // TRAVERSAL-BEGIN 1.21.11-neoforge
         match("1.21.11", "neoforge")
         // TRAVERSAL-END 1.21.11-neoforge
 
-        // TRAVERSAL-BEGIN 26.1.1-neoforge
-        match("26.1.1", "neoforge")
-        // TRAVERSAL-END 26.1.1-neoforge
 
-        // TRAVERSAL-BEGIN 26.1.2-neoforge
-        match("26.1.2", "neoforge")
-        // TRAVERSAL-END 26.1.2-neoforge
 
         // TRAVERSAL-BEGIN 26.2-neoforge
         match("26.2", "neoforge")

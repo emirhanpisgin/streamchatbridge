@@ -12,6 +12,7 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Node,
+    [switch]$KeepDir,
     [switch]$DryRun
 )
 
@@ -105,7 +106,7 @@ if ($DryRun) {
 
 Set-Content -LiteralPath $SettingsPath -Value $newSettings -NoNewline
 Set-Content -LiteralPath $PropertiesPath -Value $newProps -NoNewline
-if ($dirExists) { Remove-Item $nodeDir -Recurse -Force }
+if ($dirExists -and -not $KeepDir) { Remove-Item $nodeDir -Recurse -Force }
 
 Write-Host "  removed $Node" -ForegroundColor Green
 Write-Host "  remember: close the previous node's mod.mc_compat range (AGENTS.md section 10) and sync publish-modrinth.ps1 game lists" -ForegroundColor Yellow
