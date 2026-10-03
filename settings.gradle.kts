@@ -46,6 +46,39 @@ stonecutter {
         // to cover older Minecraft versions - see AGENTS.md.
         match("26.2", "fabric")
         match("1.17.1", "fabric")
+        // TRAVERSAL-BEGIN 1.19-fabric
+        match("1.19", "fabric")
+        // TRAVERSAL-END 1.19-fabric
+        // TRAVERSAL-BEGIN 1.19.1-fabric
+        match("1.19.1", "fabric")
+        // TRAVERSAL-END 1.19.1-fabric
+        // TRAVERSAL-BEGIN 1.19.3-fabric
+        match("1.19.3", "fabric")
+        // TRAVERSAL-END 1.19.3-fabric
+        // TRAVERSAL-BEGIN 1.19.4-fabric
+        match("1.19.4", "fabric")
+        // TRAVERSAL-END 1.19.4-fabric
+        // TRAVERSAL-BEGIN 1.20-fabric
+        match("1.20", "fabric")
+        // TRAVERSAL-END 1.20-fabric
+        // TRAVERSAL-BEGIN 1.21-fabric
+        match("1.21", "fabric")
+        // TRAVERSAL-END 1.21-fabric
+        // TRAVERSAL-BEGIN 1.21.2-fabric
+        match("1.21.2", "fabric")
+        // TRAVERSAL-END 1.21.2-fabric
+        // TRAVERSAL-BEGIN 1.21.9-fabric
+        match("1.21.9", "fabric")
+        // TRAVERSAL-END 1.21.9-fabric
+        // TRAVERSAL-BEGIN 1.21.11-fabric
+        match("1.21.11", "fabric")
+        // TRAVERSAL-END 1.21.11-fabric
+        // TRAVERSAL-BEGIN 26.1-fabric
+        match("26.1", "fabric")
+        // TRAVERSAL-END 26.1-fabric
+        // TRAVERSAL-BEGIN 26.3-fabric
+        match("26.3", "fabric")
+        // TRAVERSAL-END 26.3-fabric
 
         match("26.1", "forge")
         match("26.1", "neoforge")

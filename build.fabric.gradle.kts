@@ -34,6 +34,7 @@ dependencies {
     else fapi("fabric-key-binding-api-v1")
     if (sc.current.parsed >= "1.19") fapi("fabric-command-api-v2")
     else fapi("fabric-command-api-v1")
+    if (sc.current.parsed >= "1.19.3") fapi("fabric-message-api-v1")
 }
 
 loom {
