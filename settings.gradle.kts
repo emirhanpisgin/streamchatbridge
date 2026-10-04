@@ -86,6 +86,9 @@ stonecutter {
         // TRAVERSAL-BEGIN 1.17.1-forge
         match("1.17.1", "forge")
         // TRAVERSAL-END 1.17.1-forge
+        // TRAVERSAL-BEGIN 1.18-forge
+        match("1.18", "forge")
+        // TRAVERSAL-END 1.18-forge
 
 
 
