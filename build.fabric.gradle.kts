@@ -49,6 +49,14 @@ loom {
         if (project.hasProperty("scbQuickPlay")) {
             programArgs("--quickPlaySingleplayer", project.property("scbQuickPlay") as String)
         }
+
+        // Test hook: `-PscbServerJoin=<host[:port]>` connects straight to a server
+        // (nodes that predate quick-play).
+        if (name == "client" && project.hasProperty("scbServerJoin")) {
+            val joinParts = (project.property("scbServerJoin") as String).split(":")
+            programArgs("--server", joinParts[0])
+            if (joinParts.size > 1) programArgs("--port", joinParts[1])
+        }
     }
 }
 

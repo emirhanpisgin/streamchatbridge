@@ -33,7 +33,7 @@ public class ChatScreenMixin {
     /*@Inject(method = "handleChatInput", at = @At("HEAD"), cancellable = true)
     private void streamchatbridge$interceptChatInput(String message, boolean addToHistory, CallbackInfoReturnable<Boolean> callbackInfo) {
         if (!MinecraftChatBridge.handleOutgoing(message)) {
-            callbackInfo.setReturnValue(false);
+            callbackInfo.setReturnValue(true);
 
             callbackInfo.cancel();
         }
