@@ -55,8 +55,16 @@ loom {
             val joinParts = (project.property("scbServerJoin") as String).split(":")
             val host = joinParts[0]
             val port = joinParts.getOrElse(1) { "25565" }
-            if (sc.current.parsed >= "1.20") programArgs("--quickPlayMultiplayer", "$host:$port")
-            else programArgs("--server", host, "--port", port)
+            if (sc.current.parsed >= "1.20") {
+                programArgs("--quickPlayMultiplayer", "$host:$port")
+            } else if (sc.current.parsed >= "1.19") {
+                programArgs("--server", host, "--port", port)
+            } else {
+                // `--server` connects before the initial model bake finishes on
+                // 1.17/1.18, crashing the client ("bakedModel is null"); the dev
+                // auto-join mixin connects once the title screen is up instead.
+                vmArgs("-Dscb.devJoin=$host:$port")
+            }
         }
     }
 }
@@ -69,6 +77,23 @@ java {
 // A toolchain would force foojay to download a JDK, which failed on this machine.
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(requiredJava.majorVersion.toInt())
+}
+
+// Run the dev client/server on the era-appropriate JDK. Old Minecraft on the
+// daemon JDK crashes in world rendering (1.17.1 on Java 25: "bakedModel is null"
+// while tesselating dirt) and stalls the first terrain load.
+val runJavaVersion: JavaLanguageVersion = when {
+    sc.current.parsed >= "26.1" -> JavaLanguageVersion.of(25)
+    sc.current.parsed >= "1.20.5" -> JavaLanguageVersion.of(21)
+    else -> JavaLanguageVersion.of(17)
+}
+val runLauncher = javaToolchains.launcherFor {
+    languageVersion.set(runJavaVersion)
+}
+tasks.withType<JavaExec>().configureEach {
+    if (name == "runClient" || name == "runServer") {
+        javaLauncher.set(runLauncher)
+    }
 }
 
 tasks {

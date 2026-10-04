@@ -28,6 +28,9 @@ $Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
+# Accept both `-Nodes a,b,c` (single comma string from native callers) and arrays.
+$Nodes = @($Nodes | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
 $matrix = @(
     # fabric: all versions run a matching vanilla server (works on every era)
     @{ Node = "1.17.1-fabric";  Mode = "server" }
@@ -68,8 +71,10 @@ $matrix = @(
     @{ Node = "1.21.9-neoforge";  Mode = "server" }
     @{ Node = "1.21.11-neoforge"; Mode = "server" }
     @{ Node = "26.1-neoforge";    Mode = "server" }
-    @{ Node = "26.2-neoforge";    Mode = "server" }
-    @{ Node = "26.3-neoforge";    Mode = "server"; Focus = $true }
+    # NeoForge 26.2/26.3 ignore the quick-play multiplayer arg in dev; use the
+    # sanitized singleplayer bases instead.
+    @{ Node = "26.2-neoforge";    Mode = "quick"; World = "build\e2e\base-forge-26.2\world" }
+    @{ Node = "26.3-neoforge";    Mode = "quick"; World = "build\e2e\base-forge-26.3\world"; Focus = $true }
 )
 
 $selected = @($matrix)

@@ -150,8 +150,11 @@ public static class ScbWin32 {
 Add-Type -AssemblyName System.Windows.Forms
 
 function Get-GameWindow {
+    param([datetime]$After = [datetime]::MinValue)
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        $found = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
+        $found = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.MainWindowTitle -like "*Minecraft*" -and $_.MainWindowHandle -ne 0 -and $_.StartTime -gt $After
+        } | Select-Object -First 1
         if ($found) { return $found }
         Start-Sleep -Seconds 1
     }
@@ -309,6 +312,7 @@ motd=scb e2e
 Remove-Item -LiteralPath $ClientLog -Force -ErrorAction SilentlyContinue
 $clientArgs = @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "--console=plain")
 if ($UseQuickPlay) { $clientArgs += "-PscbQuickPlay=$WorldName" } else { $clientArgs += "-PscbServerJoin=localhost:$Port" }
+$clientStart = Get-Date
 $p = Start-Process -FilePath (Join-Path $Root "gradlew.bat") `
     -ArgumentList $clientArgs -WorkingDirectory $Root `
     -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
@@ -321,7 +325,7 @@ while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
     # A minimized window stalls world loading on the new render backends and
     # makes the load screens unable to progress; restore it without focusing.
     try {
-        $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
+        $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" -and $_.MainWindowHandle -ne 0 -and $_.StartTime -gt $clientStart } | Select-Object -First 1
         if ($w -and $w.MainWindowHandle -ne 0 -and [ScbWin32]::IsIconic($w.MainWindowHandle)) {
             [ScbWin32]::ShowWindow($w.MainWindowHandle, 9) | Out-Null   # SW_RESTORE
             Write-Report "window: restored from minimized"
@@ -335,7 +339,7 @@ Write-Report "join: $(if ($joined) { 'ok' } else { 'TIMEOUT' })"
 
 $screenshot = $false
 if ($joined) {
-    $game = Get-GameWindow
+    $game = Get-GameWindow -After $clientStart
     if (-not $game) { Write-Report "FAIL no Minecraft window found" }
     else {
         $hwnd = $game.MainWindowHandle
@@ -355,7 +359,7 @@ if ($joined) {
         $inWorld = $false
         $titleDeadline = (Get-Date).AddSeconds(120)
         while ((Get-Date) -lt $titleDeadline) {
-            $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
+            $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" -and $_.MainWindowHandle -ne 0 -and $_.StartTime -gt $clientStart } | Select-Object -First 1
             if ($w -and $w.MainWindowTitle -match "Multiplayer|Singleplayer") { $inWorld = $true; break }
             Start-Sleep -Seconds 2
         }
@@ -368,15 +372,27 @@ if ($joined) {
         Send-ChatLine -Handle $hwnd -Text "/scb status"
         Write-Report "sent: /scb status"
 
-        $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
         $echo = $false
-        while ((Get-Date) -lt $echoDeadline) {
+        $firstDeadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $firstDeadline) {
+            Start-Sleep -Seconds 3
+            if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
+        }
+        if (-not $echo) {
+            # Input/Twitch hiccups happen (26.3 focus races); retry the probe once.
+            Write-Report "echo: no reply after 30s, resending probe"
+            Send-ChatLine -Handle $hwnd -Text "$Prefix$Probe"
+        }
+        $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
+        while (-not $echo -and (Get-Date) -lt $echoDeadline) {
             Start-Sleep -Seconds 3
             if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
         }
 
         if ($UseQuickPlay) {
-            $serverGot = [bool](Select-String -Path $ClientLog -Pattern "> $([regex]::Escape($Prefix))$Probe" -Quiet -ErrorAction SilentlyContinue)
+            # A leaked message shows up as a chat line ("> ..." on some versions,
+            # "<Player> ..." on others); the Twitch echo is expected, ignore it.
+            $serverGot = [bool](Select-String -Path $ClientLog -Pattern ([regex]::Escape($Probe)) -ErrorAction SilentlyContinue | Where-Object { $_.Line -notmatch "\[Twitch\]" } | Select-Object -First 1)
         } else {
             $serverGot = [bool](Select-String -Path $ServerLog -Pattern ([regex]::Escape($Probe)) -Quiet -ErrorAction SilentlyContinue)
         }
@@ -430,7 +446,7 @@ if (-not $LeaveOpen) {
     Write-Report "client and server left running"
 }
 
-[ScbWin32]::SetThreadExecutionState(0x80000000) | Out-Null   # ES_CONTINUOUS (reset)
+[ScbWin32]::SetThreadExecutionState([uint32]0x80000000) | Out-Null   # ES_CONTINUOUS (reset)
 
 # Token rotation: push the newest refresh token back to the root run dir.
 if ($Loader -eq "neoforge") {
