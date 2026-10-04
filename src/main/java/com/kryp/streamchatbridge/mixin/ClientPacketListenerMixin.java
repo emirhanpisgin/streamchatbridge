@@ -8,6 +8,9 @@ import org.spongepowered.asm.mixin.Mixin;
 //? if fabric && <1.19 {
 /*import com.kryp.streamchatbridge.minecraft.MinecraftChatBridge;
 
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
+
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -18,9 +21,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ClientPacketListenerMixin {
 
     //? if <1.19 {
-    /*@Inject(method = "sendChat", at = @At("HEAD"), cancellable = true)
-    private void streamchatbridge$interceptChat(String message, CallbackInfo callbackInfo) {
-        if (!MinecraftChatBridge.handleOutgoing(message)) {
+    /*@Inject(method = "send", at = @At("HEAD"), cancellable = true)
+    private void streamchatbridge$interceptChat(Packet<?> packet, CallbackInfo callbackInfo) {
+        if (packet instanceof ServerboundChatPacket chat && !MinecraftChatBridge.handleOutgoing(chat.getMessage())) {
             callbackInfo.cancel();
         }
     }
