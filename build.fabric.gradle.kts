@@ -50,12 +50,13 @@ loom {
             programArgs("--quickPlaySingleplayer", project.property("scbQuickPlay") as String)
         }
 
-        // Test hook: `-PscbServerJoin=<host[:port]>` connects straight to a server
-        // (nodes that predate quick-play).
+        // Test hook: `-PscbServerJoin=<host[:port]>` connects straight to a server.
         if (name == "client" && project.hasProperty("scbServerJoin")) {
             val joinParts = (project.property("scbServerJoin") as String).split(":")
-            programArgs("--server", joinParts[0])
-            if (joinParts.size > 1) programArgs("--port", joinParts[1])
+            val host = joinParts[0]
+            val port = joinParts.getOrElse(1) { "25565" }
+            if (sc.current.parsed >= "1.20") programArgs("--quickPlayMultiplayer", "$host:$port")
+            else programArgs("--server", host, "--port", port)
         }
     }
 }
@@ -85,6 +86,16 @@ tasks {
             register("minecraft", "mod.mc_compat")
             register("command_api", "deps.fabric_command_api")
             register("pack_format", "pack_format")
+            // Resource pack schema changed in 1.21.9 (format >= 65): pack_format is
+            // replaced by mandatory min_format/max_format.
+            val packFormatValue: String = sc.properties["pack_format"]
+            val packFields = if (sc.current.parsed >= "1.21.9") {
+                ",\n        \"min_format\": $packFormatValue,\n        \"max_format\": 999"
+            } else {
+                ",\n        \"pack_format\": $packFormatValue"
+            }
+            inputs.property("pack_fields", packFields)
+            set("pack_fields", packFields)
             val keyModule = if (sc.current.parsed >= "26.1") "fabric-key-mapping-api-v1" else "fabric-key-binding-api-v1"
             inputs.property("key_module", keyModule)
             set("key_module", keyModule)

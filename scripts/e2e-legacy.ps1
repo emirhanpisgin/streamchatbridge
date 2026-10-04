@@ -1,31 +1,35 @@
 #requires -Version 7.0
 <#
-    Legacy (pre-1.20) end-to-end client test for Fabric nodes that predate quick-play.
+    Server-join end-to-end client test for any Fabric/Forge/NeoForge node, with
+    in-game screen check. Works on versions without quick-play by starting a
+    matching vanilla server (era JDK) and joining via `-PscbServerJoin`.
 
-    Starts a vanilla server matching the node's Minecraft version (JDK 17), launches
-    the Fabric dev client with `-PscbServerJoin=localhost:<port>`, waits for the join,
-    then injects chat input with PostMessage (no window focus needed) and checks:
-      1. the probe message never reaches the server (chat interception);
-      2. the probe comes back through the platform echo (outgoing send worked);
-      3. `/scb status` output is in the client log.
+    Steps:
+      1. start vanilla server for the node's Minecraft version
+      2. launch the dev client, auto-join localhost (quickPlayMultiplayer on >=1.20)
+      3. maximize the game window and force guiScale:2 in options.txt beforehand
+      4. inject chat with PostMessage: probe (must NOT reach the server), /scb status
+      5. press F8 (open Stream Chat Bridge dashboard), then F2 to screenshot the
+         game window; the PNG is copied to build/e2e/screenshots/<node>.png
 
     Examples:
         pwsh -File scripts/e2e-legacy.ps1 -Node 1.19-fabric
-        pwsh -File scripts/e2e-legacy.ps1 -Node 1.19.1-fabric -Focus
+        pwsh -File scripts/e2e-legacy.ps1 -Node 26.3-fabric -NoScreen
 #>
 param(
     [Parameter(Mandatory = $true)]
     [string]$Node,
 
-    [string]$ServerJar = "",
     [int]$Port = 25565,
-    [string]$ServerJdk = "C:\Program Files\Java\jdk-17",
     [string]$BuildJdk = "",
     [string]$Prefix = "",
+    [string]$BaseWorld = "",
     [int]$StartTimeoutSec = 300,
     [int]$JoinTimeoutSec = 300,
-    [int]$EchoTimeoutSec = 45,
+    [int]$EchoTimeoutSec = 60,
     [switch]$Focus,
+    [switch]$NoScreen,
+    [switch]$ServerJoin,
     [switch]$LeaveOpen
 )
 
@@ -33,7 +37,22 @@ $ErrorActionPreference = "Continue"
 $Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 
-$Mc = $Node.Split('-')[0]
+$nodeParts = $Node -split '-'
+$Loader = $nodeParts[-1]
+if (@("fabric", "forge", "neoforge") -notcontains $Loader) { throw "Cannot derive loader from node '$Node'" }
+$Mc = ($nodeParts[0..($nodeParts.Count - 2)] -join '-')
+$McV = [version]$Mc
+
+# >=1.20 clients can jump straight into a (scratch copy of a) world; older ones
+# join a matching vanilla server instead. `-ServerJoin` forces the server path
+# (needed on Forge 26.x, whose dev runtime crashes on multiplayer joins).
+$UseQuickPlay = ($McV -ge [version]"1.20") -and (-not $ServerJoin)
+$WorldName = "ScbE2E"
+if (-not $BaseWorld) { $BaseWorld = Join-Path $Root "build\e2e\base-world" }
+if ($UseQuickPlay -and -not (Test-Path (Join-Path $BaseWorld "level.dat"))) {
+    throw "Base world missing: $BaseWorld - generate it with a 1.19 server test first"
+}
+
 if (-not $BuildJdk) {
     $preferred = "C:\Program Files\Java\jdk-25.0.2"
     if (Test-Path $preferred) { $BuildJdk = $preferred }
@@ -42,7 +61,13 @@ if (-not $BuildJdk) {
 }
 $env:JAVA_HOME = $BuildJdk
 
-$RunDir = Join-Path $Root "run"
+$ServerJdk = if ($McV -ge [version]"26.1") { "C:\Program Files\Java\jdk-25.0.2" }
+    elseif ($McV -ge [version]"1.20.5") { "C:\Program Files\Java\jdk-21" }
+    else { "C:\Program Files\Java\jdk-17" }
+if (-not (Test-Path (Join-Path $ServerJdk "bin\java.exe"))) { throw "Server JDK not found at $ServerJdk" }
+$ServerJava = Join-Path $ServerJdk "bin\java.exe"
+
+$RunDir = if ($Loader -eq "neoforge") { Join-Path $Root "versions\$Node\run" } else { Join-Path $Root "run" }
 $ClientLog = Join-Path $RunDir "logs\latest.log"
 $ServerDir = Join-Path $Root "build\e2e\server-$Mc"
 $ServerLog = Join-Path $ServerDir "logs\latest.log"
@@ -50,28 +75,45 @@ $OutLog = Join-Path $Root "build\e2e-$Node.out.log"
 $ErrLog = Join-Path $Root "build\e2e-$Node.err.log"
 $ServerOut = Join-Path $Root "build\e2e\server-$Mc.out.log"
 $ReportPath = Join-Path $Root "build\e2e\$Node.log"
-New-Item -ItemType Directory -Force -Path (Split-Path $ReportPath -Parent) | Out-Null
+$ShotDir = Join-Path $Root "build\e2e\screenshots"
+New-Item -ItemType Directory -Force -Path (Split-Path $ReportPath -Parent), $ShotDir | Out-Null
 
-if (-not (Test-Path $ServerJar)) {
-    $ServerJar = Join-Path $Root "build\.cache\server-$Mc.jar"
-    if (-not (Test-Path $ServerJar)) {
-        Write-Host "downloading vanilla server $Mc..."
-        $manifest = Invoke-RestMethod "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json" -TimeoutSec 30
-        $entry = $manifest.versions | Where-Object { $_.id -eq $Mc } | Select-Object -First 1
-        $json = Invoke-RestMethod $entry.url -TimeoutSec 30
-        Invoke-WebRequest $json.downloads.server.url -OutFile $ServerJar -TimeoutSec 900
+# --- run dir prep: GUI scale so the dashboard fits, no pause on focus loss -----
+New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+$optPath = Join-Path $RunDir "options.txt"
+$opt = @(if (Test-Path $optPath) { Get-Content -LiteralPath $optPath })
+if ($opt -match '^guiScale:') { $opt = $opt -replace '^guiScale:.*$', 'guiScale:2' } else { $opt += 'guiScale:2' }
+if ($opt -match '^pauseOnLostFocus:') { $opt = $opt -replace '^pauseOnLostFocus:.*$', 'pauseOnLostFocus:false' } else { $opt += 'pauseOnLostFocus:false' }
+Set-Content -LiteralPath $optPath -Value $opt
+
+# Neoforge nodes use per-node run dirs: seed config/token from the root run dir.
+$rootCfg = Join-Path $Root "run\config"
+$nodeCfg = Join-Path $RunDir "config"
+New-Item -ItemType Directory -Force -Path $nodeCfg | Out-Null
+foreach ($f in @("streamchatbridge.json", "streamchatbridge-twitch.json", "streamchatbridge-kick.json")) {
+    $src = Join-Path $rootCfg $f
+    $dst = Join-Path $nodeCfg $f
+    if ((Test-Path $src) -and ((-not (Test-Path $dst)) -or ((Get-Item $src).LastWriteTime -gt (Get-Item $dst).LastWriteTime))) {
+        Copy-Item -LiteralPath $src -Destination $dst -Force
     }
 }
 
-if (-not (Test-Path (Join-Path $ServerJdk "bin\java.exe"))) { throw "Server JDK not found at $ServerJdk" }
-$ServerJava = Join-Path $ServerJdk "bin\java.exe"
-
 if (-not $Prefix) {
-    $cfgPath = Join-Path $RunDir "config\streamchatbridge.json"
+    $cfgPath = Join-Path $nodeCfg "streamchatbridge.json"
     $Prefix = "!t "
     if (Test-Path $cfgPath) {
         try { $Prefix = (Get-Content $cfgPath -Raw | ConvertFrom-Json).twitchOutgoingPrefix } catch { }
     }
+}
+
+if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw "Port $Port is already in use" }
+
+$ServerJar = Join-Path $Root "build\.cache\server-$Mc.jar"
+if (-not $UseQuickPlay -and -not (Test-Path $ServerJar)) {
+    $manifest = Invoke-RestMethod "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json" -TimeoutSec 30
+    $entry = $manifest.versions | Where-Object { $_.id -eq $Mc } | Select-Object -First 1
+    $json = Invoke-RestMethod $entry.url -TimeoutSec 30
+    Invoke-WebRequest $json.downloads.server.url -OutFile $ServerJar -TimeoutSec 900
 }
 
 $Stamp = Get-Date -Format "HHmmss"
@@ -95,12 +137,17 @@ public static class ScbWin32 {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 }
 "@
 Add-Type -AssemblyName System.Windows.Forms
 
 function Get-GameWindow {
-    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $found = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
         if ($found) { return $found }
         Start-Sleep -Seconds 1
@@ -134,6 +181,15 @@ function Post-Key {
     Start-Sleep -Milliseconds 40
 }
 
+function Send-KeyWithFakeFocus {
+    param([IntPtr]$Handle, [int]$Vk)
+    [ScbWin32]::PostMessage($Handle, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Milliseconds 300
+    Post-Key -Handle $Handle -Vk $Vk
+    Start-Sleep -Milliseconds 200
+    [ScbWin32]::PostMessage($Handle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+}
+
 function Send-ChatLine {
     param([IntPtr]$Handle, [string]$Text)
     if ($Focus) {
@@ -165,12 +221,21 @@ function Send-ChatLine {
     [ScbWin32]::PostMessage($Handle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 }
 
-Write-Report "=== e2e-legacy $Node (mc=$Mc, port=$Port, prefix='$Prefix', probe=$Probe, input=$(if ($Focus) { 'sendkeys' } else { 'postmessage' })) ==="
+Write-Report "=== e2e-legacy $Node (mc=$Mc, loader=$Loader, port=$Port, prefix='$Prefix', probe=$Probe, input=$(if ($Focus) { 'sendkeys' } else { 'postmessage' })) ==="
 
-# --- vanilla server -----------------------------------------------------------
-New-Item -ItemType Directory -Force -Path $ServerDir | Out-Null
-Set-Content -LiteralPath (Join-Path $ServerDir "eula.txt") -Value "eula=true" -NoNewline
-Set-Content -LiteralPath (Join-Path $ServerDir "server.properties") -Value @"
+# --- world / server ------------------------------------------------------------
+$srv = $null
+if ($UseQuickPlay) {
+    $savesDir = Join-Path $RunDir "saves"
+    $worldDir = Join-Path $savesDir $WorldName
+    New-Item -ItemType Directory -Force -Path $savesDir | Out-Null
+    Remove-Item -LiteralPath $worldDir -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath $BaseWorld -Destination $worldDir -Recurse -Force
+    Write-Report "world: quick-play '$WorldName' from base world"
+} else {
+    New-Item -ItemType Directory -Force -Path $ServerDir | Out-Null
+    Set-Content -LiteralPath (Join-Path $ServerDir "eula.txt") -Value "eula=true" -NoNewline
+    Set-Content -LiteralPath (Join-Path $ServerDir "server.properties") -Value @"
 online-mode=false
 enforce-secure-profile=false
 level-name=world
@@ -184,65 +249,87 @@ sync-chunk-writes=false
 motd=scb e2e
 "@ -NoNewline
 
-Remove-Item -LiteralPath $ServerLog -Force -ErrorAction SilentlyContinue
-$srv = Start-Process -FilePath $ServerJava -ArgumentList @("-Xmx1G", "-jar", $ServerJar, "nogui") `
-    -WorkingDirectory $ServerDir -RedirectStandardOutput $ServerOut -RedirectStandardError $ErrLog `
-    -PassThru -WindowStyle Hidden
+    Remove-Item -LiteralPath $ServerLog -Force -ErrorAction SilentlyContinue
+    $srv = Start-Process -FilePath $ServerJava -ArgumentList @("-Xmx1G", "-jar", $ServerJar, "nogui") `
+        -WorkingDirectory $ServerDir -RedirectStandardOutput $ServerOut -RedirectStandardError $ErrLog `
+        -PassThru -WindowStyle Hidden
 
-$serverUp = $false
-$deadline = (Get-Date).AddSeconds($StartTimeoutSec)
-while (-not $srv.HasExited -and (Get-Date) -lt $deadline) {
-    Start-Sleep -Seconds 4
-    if (Test-Path $ServerLog) {
-        if (Select-String -Path $ServerLog -Pattern 'Done \(' -Quiet -ErrorAction SilentlyContinue) { $serverUp = $true; break }
+    $serverUp = $false
+    $deadline = (Get-Date).AddSeconds($StartTimeoutSec)
+    while (-not $srv.HasExited -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 4
+        if (Test-Path $ServerLog) {
+            if (Select-String -Path $ServerLog -Pattern 'Done \(' -Quiet -ErrorAction SilentlyContinue) { $serverUp = $true; break }
+        }
     }
-    if ($srv.HasExited) { break }
-}
-Write-Report "server: $(if ($serverUp) { 'up' } else { 'FAILED' })"
-if (-not $serverUp) {
-    if (Test-Path $ServerOut) { Get-Content $ServerOut -Tail 15 | ForEach-Object { Write-Report ("  " + $_) } }
-    Write-Report "RESULT FAIL (server did not start)"
-    exit 1
+    Write-Report "server: $(if ($serverUp) { 'up' } else { 'FAILED' })"
+    if (-not $serverUp) {
+        if (Test-Path $ServerOut) { Get-Content $ServerOut -Tail 15 | ForEach-Object { Write-Report ("  " + $_) } }
+        Write-Report "RESULT FAIL (server did not start)"
+        exit 1
+    }
 }
 
-# --- dev client ---------------------------------------------------------------
+# --- dev client ----------------------------------------------------------------
 Remove-Item -LiteralPath $ClientLog -Force -ErrorAction SilentlyContinue
+$clientArgs = @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "--console=plain")
+if ($UseQuickPlay) { $clientArgs += "-PscbQuickPlay=$WorldName" } else { $clientArgs += "-PscbServerJoin=localhost:$Port" }
 $p = Start-Process -FilePath (Join-Path $Root "gradlew.bat") `
-    -ArgumentList @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "-PscbServerJoin=localhost:$Port", "--console=plain") `
-    -WorkingDirectory $Root -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
+    -ArgumentList $clientArgs -WorkingDirectory $Root `
+    -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
 
 $joined = $false
+$joinLog = if ($UseQuickPlay) { $ClientLog } else { $ServerLog }
 $deadline = (Get-Date).AddSeconds($JoinTimeoutSec)
 while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 4
-    if (Test-Path $ServerLog) {
-        if (Select-String -Path $ServerLog -Pattern "joined the game" -Quiet -ErrorAction SilentlyContinue) { $joined = $true; break }
+    # A minimized window stalls world loading on the new render backends and
+    # makes the load screens unable to progress; restore it without focusing.
+    try {
+        $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
+        if ($w -and $w.MainWindowHandle -ne 0 -and [ScbWin32]::IsIconic($w.MainWindowHandle)) {
+            [ScbWin32]::ShowWindow($w.MainWindowHandle, 4) | Out-Null   # SW_SHOWNOACTIVATE
+        }
+    } catch { }
+    if (Test-Path $joinLog) {
+        if (Select-String -Path $joinLog -Pattern "joined the game" -Quiet -ErrorAction SilentlyContinue) { $joined = $true; break }
     }
 }
 Write-Report "join: $(if ($joined) { 'ok' } else { 'TIMEOUT' })"
 
+$screenshot = $false
 if ($joined) {
-    # The server logs the join before the client finishes "Downloading terrain";
-    # wait until the window title carries the world suffix before injecting keys.
-    $inWorld = $false
-    $titleDeadline = (Get-Date).AddSeconds(120)
-    while ((Get-Date) -lt $titleDeadline) {
-        $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
-        if ($w -and $w.MainWindowTitle -match "Multiplayer|Singleplayer") { $inWorld = $true; break }
-        Start-Sleep -Seconds 2
-    }
-    Write-Report "in-world: $inWorld"
-    Start-Sleep -Seconds 3
-
     $game = Get-GameWindow
     if (-not $game) { Write-Report "FAIL no Minecraft window found" }
     else {
-        Write-Report "window: $($game.MainWindowTitle)"
+        $hwnd = $game.MainWindowHandle
+        if ([ScbWin32]::IsIconic($hwnd)) { [ScbWin32]::ShowWindow($hwnd, 4) | Out-Null; Start-Sleep -Seconds 2 }
+        # Fill the work area without activating (keeps the user's foreground app).
+        $work = New-Object ScbWin32+RECT
+        [ScbWin32]::SystemParametersInfo(0x0030, 0, [ref]$work, 0) | Out-Null
+        [ScbWin32]::SetWindowPos($hwnd, [IntPtr]::Zero, $work.Left, $work.Top, ($work.Right - $work.Left), ($work.Bottom - $work.Top), 0x0054) | Out-Null
+        Start-Sleep -Seconds 3
+        $rect = New-Object ScbWin32+RECT
+        [ScbWin32]::GetClientRect($hwnd, [ref]$rect) | Out-Null
+        $width = $rect.Right - $rect.Left
+        $height = $rect.Bottom - $rect.Top
+        Write-Report "window: $($game.MainWindowTitle) ${width}x${height}"
 
-        Send-ChatLine -Handle $game.MainWindowHandle -Text "$Prefix$Probe"
+        # wait until actually in the world (title gets the world suffix)
+        $inWorld = $false
+        $titleDeadline = (Get-Date).AddSeconds(120)
+        while ((Get-Date) -lt $titleDeadline) {
+            $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
+            if ($w -and $w.MainWindowTitle -match "Multiplayer|Singleplayer") { $inWorld = $true; break }
+            Start-Sleep -Seconds 2
+        }
+        Write-Report "in-world: $inWorld"
+        Start-Sleep -Seconds 3
+
+        Send-ChatLine -Handle $hwnd -Text "$Prefix$Probe"
         Write-Report "sent: $Prefix$Probe"
 
-        Send-ChatLine -Handle $game.MainWindowHandle -Text "/scb status"
+        Send-ChatLine -Handle $hwnd -Text "/scb status"
         Write-Report "sent: /scb status"
 
         $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
@@ -252,11 +339,35 @@ if ($joined) {
             if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
         }
 
-        $serverGot = [bool](Select-String -Path $ServerLog -Pattern ([regex]::Escape($Probe)) -Quiet -ErrorAction SilentlyContinue)
+        if ($UseQuickPlay) {
+            $serverGot = [bool](Select-String -Path $ClientLog -Pattern "> $([regex]::Escape($Prefix))$Probe" -Quiet -ErrorAction SilentlyContinue)
+        } else {
+            $serverGot = [bool](Select-String -Path $ServerLog -Pattern ([regex]::Escape($Probe)) -Quiet -ErrorAction SilentlyContinue)
+        }
         $status = [bool](Select-String -Path $ClientLog -Pattern "Minecraft . Twitch: ON|Minecraft → Twitch: ON" -Quiet -ErrorAction SilentlyContinue)
 
         Write-Report "checks: intercepted=$( -not $serverGot ) platform-echo=$echo scb-status=$status"
-        if ((-not $serverGot) -and $echo -and $status) {
+
+        if (-not $NoScreen) {
+            $shotBefore = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+            $lastBefore = if ($shotBefore) { $shotBefore[0].LastWriteTime } else { [datetime]::MinValue }
+            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x77   # F8 opens the dashboard
+            Start-Sleep -Seconds 3
+            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x71   # F2 screenshots
+            Start-Sleep -Seconds 2
+            $shots = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)
+            if ($shots.Count -gt 0) {
+                $dest = Join-Path $ShotDir "$Node.png"
+                Copy-Item -LiteralPath $shots[0].FullName -Destination $dest -Force
+                $size = [math]::Round((Get-Item $dest).Length / 1KB)
+                Write-Report "screen: F8 screenshot captured (${size} KB) -> $dest"
+                $screenshot = $size -gt 30
+            } else {
+                Write-Report "screen: FAIL no screenshot produced by F2"
+            }
+        }
+
+        if ((-not $serverGot) -and $echo -and $status -and ($NoScreen -or $screenshot)) {
             Write-Report "RESULT PASS"
         } else {
             Write-Report "RESULT FAIL"
@@ -275,4 +386,13 @@ if (-not $LeaveOpen) {
     if ($srv -and -not $srv.HasExited) { taskkill /PID $($srv.Id) /T /F | Out-Null; Write-Report "server stopped" }
 } else {
     Write-Report "client and server left running"
+}
+
+# Token rotation: push the newest refresh token back to the root run dir.
+if ($Loader -eq "neoforge") {
+    $rootTok = Join-Path $rootCfg "streamchatbridge-twitch.json"
+    $nodeTok = Join-Path $nodeCfg "streamchatbridge-twitch.json"
+    if ((Test-Path $rootTok) -and (Test-Path $nodeTok) -and ((Get-Item $nodeTok).LastWriteTime -gt (Get-Item $rootTok).LastWriteTime)) {
+        Copy-Item -LiteralPath $nodeTok -Destination $rootTok -Force
+    }
 }

@@ -80,7 +80,16 @@ minecraft {
             }
         }
 
-        register("client")
+        register("client") {
+            // Test hook: `-PscbServerJoin=<host[:port]>` connects straight to a server.
+            if (project.hasProperty("scbServerJoin")) {
+                val joinParts = (project.property("scbServerJoin") as String).split(":")
+                val host = joinParts[0]
+                val port = joinParts.getOrElse(1) { "25565" }
+                if (sc.current.parsed >= "1.20") args("--quickPlayMultiplayer", "$host:$port")
+                else args("--server", host, "--port", port)
+            }
+        }
         register("server")
     }
 }
@@ -171,6 +180,16 @@ tasks {
             register("minecraft", "mod.mc_compat")
             register("fml", "deps.forge_fml")
             register("pack_format", "pack_format")
+            // Resource pack schema changed in 1.21.9 (format >= 65): pack_format is
+            // replaced by mandatory min_format/max_format.
+            val packFormatValue: String = sc.properties["pack_format"]
+            val packFields = if (sc.current.parsed >= "1.21.9") {
+                ",\n        \"min_format\": $packFormatValue,\n        \"max_format\": 999"
+            } else {
+                ",\n        \"pack_format\": $packFormatValue"
+            }
+            inputs.property("pack_fields", packFields)
+            set("pack_fields", packFields)
         }
 
         filesMatching("META-INF/mods.toml") { expand(props) }

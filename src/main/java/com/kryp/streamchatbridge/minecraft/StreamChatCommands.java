@@ -43,6 +43,54 @@ public final class StreamChatCommands {
         dispatcher.register(build());
     }
 
+    /**
+     * Local fallback for loaders with no client command event (Forge < 1.19).
+     * Returns true when the command was recognized and handled.
+     */
+    public static boolean handleLocalCommand(String message) {
+        if (message == null || !message.startsWith("/scb")) {
+            return false;
+        }
+
+        String[] parts = message.substring(1).trim().split("\\s+");
+
+        if (parts.length < 2 || parts[1].equalsIgnoreCase("config")) {
+            openDashboard();
+
+            return true;
+        }
+
+        if (parts[1].equalsIgnoreCase("status")) {
+            showStatus();
+
+            return true;
+        }
+
+        if (parts[1].equalsIgnoreCase("watch")) {
+            if (parts.length >= 3 && parts[2].equalsIgnoreCase("twitch")) {
+                if (parts.length >= 4) {
+                    watchTwitch(parts[3]);
+                } else {
+                    showTwitchWatchStatus();
+                }
+
+                return true;
+            }
+
+            if (parts.length >= 3 && parts[2].equalsIgnoreCase("kick")) {
+                if (parts.length >= 4) {
+                    watchKick(parts[3]);
+                } else {
+                    showKickWatchStatus();
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static <S> LiteralArgumentBuilder<S> build() {
         return LiteralArgumentBuilder.<S>literal("scb")
 

@@ -35,6 +35,14 @@ public class StreamChatBridgeForgeClient {
     //?} else {
     /^@SubscribeEvent
     public static void onClientChat(ClientChatEvent event) {
+        //? if <1.19 {
+        if (event.getMessage().startsWith("/scb") && StreamChatCommands.handleLocalCommand(event.getMessage())) {
+            event.setCanceled(true);
+
+            return;
+        }
+        //?}
+
         if (!MinecraftChatBridge.handleOutgoing(event.getMessage())) {
             event.setCanceled(true);
         }
