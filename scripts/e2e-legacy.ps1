@@ -139,6 +139,9 @@ public static class ScbWin32 {
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
@@ -182,7 +185,13 @@ function Post-Key {
 }
 
 function Send-KeyWithFakeFocus {
-    param([IntPtr]$Handle, [int]$Vk)
+    param([IntPtr]$Handle, [int]$Vk, [string]$SendKeysKey)
+    if ($Focus) {
+        Force-Foreground -Handle $Handle | Out-Null
+        [System.Windows.Forms.SendKeys]::SendWait($SendKeysKey)
+        Start-Sleep -Milliseconds 200
+        return
+    }
     [ScbWin32]::PostMessage($Handle, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
     Start-Sleep -Milliseconds 300
     Post-Key -Handle $Handle -Vk $Vk
@@ -190,18 +199,37 @@ function Send-KeyWithFakeFocus {
     [ScbWin32]::PostMessage($Handle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 }
 
+function Capture-Window {
+    param([IntPtr]$Handle, [string]$Dest)
+    Add-Type -AssemblyName System.Drawing
+    $r = New-Object ScbWin32+RECT
+    [ScbWin32]::GetWindowRect($Handle, [ref]$r) | Out-Null
+    $w = $r.Right - $r.Left
+    $h = $r.Bottom - $r.Top
+    if ($w -le 0 -or $h -le 0) { return $false }
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    try {
+        $hdc = $g.GetHdc()
+        try { $ok = [ScbWin32]::PrintWindow($Handle, $hdc, 2) } finally { $g.ReleaseHdc($hdc) }
+    } finally { $g.Dispose() }
+    if (-not $ok) { $bmp.Dispose(); return $false }
+    $bmp.Save($Dest, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    return $true
+}
+
 function Send-ChatLine {
     param([IntPtr]$Handle, [string]$Text)
     if ($Focus) {
         Force-Foreground -Handle $Handle | Out-Null
+        # Per-char SendKeys sticks Shift on shifted characters (probe arrives as
+        # T!E2E-...); paste the line from the clipboard instead.
+        Set-Clipboard -Value $Text
         [System.Windows.Forms.SendKeys]::SendWait("t")
-        Start-Sleep -Milliseconds 700
-        foreach ($ch in $Text.ToCharArray()) {
-            if ("+^%~(){}[]".Contains($ch)) { [System.Windows.Forms.SendKeys]::SendWait("{" + $ch + "}") }
-            else { [System.Windows.Forms.SendKeys]::SendWait([string]$ch) }
-            Start-Sleep -Milliseconds 25
-        }
-        Start-Sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 600
+        [System.Windows.Forms.SendKeys]::SendWait("^v")
+        Start-Sleep -Milliseconds 300
         [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
         Start-Sleep -Milliseconds 700
         return
@@ -221,6 +249,10 @@ function Send-ChatLine {
     [ScbWin32]::PostMessage($Handle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 }
 
+# Keep the display/system awake: display sleep or lock makes the 26.3 render
+# backend throw "Cannot acquire minimized window" mid-join on unattended runs.
+[ScbWin32]::SetThreadExecutionState(0x80000003) | Out-Null   # CONTINUOUS|SYSTEM|DISPLAY
+
 Write-Report "=== e2e-legacy $Node (mc=$Mc, loader=$Loader, port=$Port, prefix='$Prefix', probe=$Probe, input=$(if ($Focus) { 'sendkeys' } else { 'postmessage' })) ==="
 
 # --- world / server ------------------------------------------------------------
@@ -238,6 +270,9 @@ if ($UseQuickPlay) {
     Set-Content -LiteralPath (Join-Path $ServerDir "server.properties") -Value @"
 online-mode=false
 enforce-secure-profile=false
+white-list=false
+enforce-whitelist=false
+difficulty=peaceful
 level-name=world
 level-type=minecraft\:flat
 generate-structures=false
@@ -288,7 +323,8 @@ while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
     try {
         $w = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*Minecraft*" } | Select-Object -First 1
         if ($w -and $w.MainWindowHandle -ne 0 -and [ScbWin32]::IsIconic($w.MainWindowHandle)) {
-            [ScbWin32]::ShowWindow($w.MainWindowHandle, 4) | Out-Null   # SW_SHOWNOACTIVATE
+            [ScbWin32]::ShowWindow($w.MainWindowHandle, 9) | Out-Null   # SW_RESTORE
+            Write-Report "window: restored from minimized"
         }
     } catch { }
     if (Test-Path $joinLog) {
@@ -303,7 +339,7 @@ if ($joined) {
     if (-not $game) { Write-Report "FAIL no Minecraft window found" }
     else {
         $hwnd = $game.MainWindowHandle
-        if ([ScbWin32]::IsIconic($hwnd)) { [ScbWin32]::ShowWindow($hwnd, 4) | Out-Null; Start-Sleep -Seconds 2 }
+        if ([ScbWin32]::IsIconic($hwnd)) { [ScbWin32]::ShowWindow($hwnd, 9) | Out-Null; Start-Sleep -Seconds 2 }
         # Fill the work area without activating (keeps the user's foreground app).
         $work = New-Object ScbWin32+RECT
         [ScbWin32]::SystemParametersInfo(0x0030, 0, [ref]$work, 0) | Out-Null
@@ -351,19 +387,25 @@ if ($joined) {
         if (-not $NoScreen) {
             $shotBefore = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
             $lastBefore = if ($shotBefore) { $shotBefore[0].LastWriteTime } else { [datetime]::MinValue }
-            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x77   # F8 opens the dashboard
+            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x77 -SendKeysKey "{F8}"   # F8 opens the dashboard
             Start-Sleep -Seconds 3
-            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x71   # F2 screenshots
+            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x71 -SendKeysKey "{F2}"   # F2 screenshots
             Start-Sleep -Seconds 2
             $shots = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)
+            $dest = Join-Path $ShotDir "$Node.png"
             if ($shots.Count -gt 0) {
-                $dest = Join-Path $ShotDir "$Node.png"
                 Copy-Item -LiteralPath $shots[0].FullName -Destination $dest -Force
                 $size = [math]::Round((Get-Item $dest).Length / 1KB)
-                Write-Report "screen: F8 screenshot captured (${size} KB) -> $dest"
+                Write-Report "screen: F8 screenshot captured via F2 (${size} KB) -> $dest"
+                $screenshot = $size -gt 30
+            } elseif (Capture-Window -Handle $hwnd -Dest $dest) {
+                # 26.3's input/render stack can ignore F2; capture the composed
+                # window directly instead.
+                $size = [math]::Round((Get-Item $dest).Length / 1KB)
+                Write-Report "screen: captured via PrintWindow fallback (${size} KB) -> $dest"
                 $screenshot = $size -gt 30
             } else {
-                Write-Report "screen: FAIL no screenshot produced by F2"
+                Write-Report "screen: FAIL no screenshot produced by F2 or PrintWindow"
             }
         }
 
@@ -387,6 +429,8 @@ if (-not $LeaveOpen) {
 } else {
     Write-Report "client and server left running"
 }
+
+[ScbWin32]::SetThreadExecutionState(0x80000000) | Out-Null   # ES_CONTINUOUS (reset)
 
 # Token rotation: push the newest refresh token back to the root run dir.
 if ($Loader -eq "neoforge") {

@@ -42,7 +42,7 @@ $matrix = @(
     @{ Node = "1.21.11-fabric"; Mode = "server" }
     @{ Node = "26.1-fabric";    Mode = "server" }
     @{ Node = "26.2-fabric";    Mode = "server" }
-    @{ Node = "26.3-fabric";    Mode = "server" }
+    @{ Node = "26.3-fabric";    Mode = "server"; Focus = $true }
 
     # forge: server joins below 26.1; 26.x uses quick-play (dev multiplayer crash)
     @{ Node = "1.17.1-forge";   Mode = "server" }
@@ -56,9 +56,9 @@ $matrix = @(
     @{ Node = "1.21.6-forge";   Mode = "server" }
     @{ Node = "1.21.9-forge";   Mode = "server" }
     @{ Node = "1.21.11-forge";  Mode = "server" }
-    @{ Node = "26.1-forge";     Mode = "quick"; World = "run\saves\TestWorld26" }
-    @{ Node = "26.2-forge";     Mode = "quick"; World = "run\saves\TestWorld" }
-    @{ Node = "26.3-forge";     Mode = "quick"; World = "run\saves\TestWorld" }
+    @{ Node = "26.1-forge";     Mode = "quick"; World = "build\e2e\base-forge-26.1\world" }
+    @{ Node = "26.2-forge";     Mode = "quick"; World = "build\e2e\base-forge-26.2\world" }
+    @{ Node = "26.3-forge";     Mode = "quick"; World = "build\e2e\base-forge-26.3\world"; Focus = $true }
 
     # neoforge: server joins are fine on all nodes
     @{ Node = "1.20.4-neoforge";  Mode = "server" }
@@ -69,7 +69,7 @@ $matrix = @(
     @{ Node = "1.21.11-neoforge"; Mode = "server" }
     @{ Node = "26.1-neoforge";    Mode = "server" }
     @{ Node = "26.2-neoforge";    Mode = "server" }
-    @{ Node = "26.3-neoforge";    Mode = "server" }
+    @{ Node = "26.3-neoforge";    Mode = "server"; Focus = $true }
 )
 
 $selected = @($matrix)
@@ -83,6 +83,7 @@ foreach ($entry in $selected) {
     $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/e2e-legacy.ps1", "-Node", $entry.Node)
     if ($entry.Mode -eq "server") { $args += "-ServerJoin" }
     if ($entry.ContainsKey("World")) { $args += @("-BaseWorld", $entry.World) }
+    if ($entry.ContainsKey("Focus") -and $entry.Focus) { $args += "-Focus" }
 
     $out = Join-Path $LogDir "sweep-$($entry.Node).log"
     $err = Join-Path $LogDir "sweep-$($entry.Node).err"
