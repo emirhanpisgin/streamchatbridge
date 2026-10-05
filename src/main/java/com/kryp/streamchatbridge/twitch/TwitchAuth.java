@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.kryp.streamchatbridge.util.BrowserUtils;
 import com.kryp.streamchatbridge.util.ConfigPaths;
+import com.kryp.streamchatbridge.util.Threads;
 
 import java.io.IOException;
 import java.net.URI;
@@ -16,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class TwitchAuth {
 
@@ -25,7 +27,13 @@ public final class TwitchAuth {
 
     private static final String DEVICE_URL = "https://id.twitch.tv/oauth2/device";
     private static final String TOKEN_URL = "https://id.twitch.tv/oauth2/token";
+    private static final String VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
     private static final String USERS_URL = "https://api.twitch.tv/helix/users";
+
+    /** Refresh this long before the access token actually expires. */
+    private static final long TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000L;
+
+    private static final long TOKEN_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000L;
 
     private static final Path TOKEN_PATH = ConfigPaths.configDir().resolve("streamchatbridge-twitch.json");
 
@@ -33,8 +41,12 @@ public final class TwitchAuth {
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
+    private final AtomicBoolean tokenMaintenanceStarted = new AtomicBoolean(false);
+
     private String accessToken;
     private String refreshToken;
+
+    private long expiresAtMillis;
 
     private String userId;
     private String username;
@@ -55,18 +67,34 @@ public final class TwitchAuth {
 
             refreshToken = getString(json, "refreshToken");
 
+            if (json.has("expiresAt") && !json.get("expiresAt").isJsonNull()) {
+                expiresAtMillis = json.get("expiresAt").getAsLong();
+            }
+
             if (accessToken == null || accessToken.isBlank()) {
 
                 return false;
             }
 
+            if (isTokenExpired() && refreshToken != null && !refreshToken.isBlank()) {
+                refreshAccessToken();
+            }
+
             if (loadCurrentUser()) {
+                startTokenMaintenance();
+
                 return true;
             }
 
             if (refreshToken != null && !refreshToken.isBlank() && refreshAccessToken()) {
 
-                return loadCurrentUser();
+                boolean restored = loadCurrentUser();
+
+                if (restored) {
+                    startTokenMaintenance();
+                }
+
+                return restored;
             }
 
         } catch (Exception e) {
@@ -110,9 +138,19 @@ public final class TwitchAuth {
 
                     refreshToken = tokenResponse.get("refresh_token").getAsString();
 
+                    if (tokenResponse.has("expires_in")) {
+                        expiresAtMillis = System.currentTimeMillis() + tokenResponse.get("expires_in").getAsLong() * 1000L;
+                    }
+
                     saveTokens();
 
-                    return loadCurrentUser();
+                    boolean authenticated = loadCurrentUser();
+
+                    if (authenticated) {
+                        startTokenMaintenance();
+                    }
+
+                    return authenticated;
                 }
 
                 String message = getString(tokenResponse, "message");
@@ -136,6 +174,7 @@ public final class TwitchAuth {
     public void logout() {
         accessToken = null;
         refreshToken = null;
+        expiresAtMillis = 0;
         userId = null;
         username = null;
 
@@ -192,6 +231,10 @@ public final class TwitchAuth {
                 refreshToken = json.get("refresh_token").getAsString();
             }
 
+            if (json.has("expires_in")) {
+                expiresAtMillis = System.currentTimeMillis() + json.get("expires_in").getAsLong() * 1000L;
+            }
+
             saveTokens();
 
             return true;
@@ -243,9 +286,102 @@ public final class TwitchAuth {
 
         json.addProperty("refreshToken", refreshToken);
 
+        json.addProperty("expiresAt", expiresAtMillis);
+
         Files.createDirectories(TOKEN_PATH.getParent());
 
         Files.writeString(TOKEN_PATH, GSON.toJson(json), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    /**
+     * Refreshes the token when it is close to expiry. Safe to call before any
+     * authenticated request; returns false when no usable token can be produced.
+     */
+    public synchronized boolean ensureValidToken() {
+        if (!isAuthenticated()) {
+            return false;
+        }
+
+        if (!isTokenExpired()) {
+            return true;
+        }
+
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return false;
+        }
+
+        return refreshAccessToken();
+    }
+
+    /**
+     * Calls Twitch's validation endpoint (required hourly) and refreshes the token
+     * when it is no longer accepted. Network failures keep the current session.
+     */
+    public synchronized boolean validateToken() {
+        if (accessToken == null || accessToken.isBlank()) {
+            return false;
+        }
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(VALIDATE_URL)).header("Authorization", "OAuth " + accessToken).GET().build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+
+                JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
+
+                if (json != null && json.has("expires_in")) {
+                    expiresAtMillis = System.currentTimeMillis() + json.get("expires_in").getAsLong() * 1000L;
+
+                    saveTokens();
+                }
+
+                return true;
+            }
+
+            if (response.statusCode() == 401) {
+                return refreshAccessToken();
+            }
+
+            return true;
+
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private boolean isTokenExpired() {
+        return expiresAtMillis <= 0 || System.currentTimeMillis() >= expiresAtMillis - TOKEN_REFRESH_MARGIN_MS;
+    }
+
+    private void startTokenMaintenance() {
+        if (!tokenMaintenanceStarted.compareAndSet(false, true)) {
+            return;
+        }
+
+        Threads.start("streamchatbridge-twitch-token", () -> {
+            while (true) {
+                try {
+                    Thread.sleep(TOKEN_MAINTENANCE_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    return;
+                }
+
+                try {
+                    if (!isAuthenticated()) {
+                        continue;
+                    }
+
+                    if (isTokenExpired()) {
+                        ensureValidToken();
+                    }
+
+                    validateToken();
+                } catch (Exception ignored) {
+                }
+            }
+        });
     }
 
     private static String encode(String value) {

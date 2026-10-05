@@ -71,9 +71,22 @@ public final class TwitchClient {
             body.addProperty("sender_id", auth.getUserId());
             body.addProperty("message", message);
 
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(CHAT_MESSAGES_URL)).header("Authorization", "Bearer " + auth.getAccessToken()).header("Client-Id", TwitchAuth.CLIENT_ID).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body))).build();
+            String jsonBody = GSON.toJson(body);
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = null;
+
+            for (int attempt = 0; attempt < 2; attempt++) {
+                HttpRequest request = HttpRequest.newBuilder().uri(URI.create(CHAT_MESSAGES_URL)).header("Authorization", "Bearer " + auth.getAccessToken()).header("Client-Id", TwitchAuth.CLIENT_ID).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+
+                response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                // The token can expire mid-session; refresh once and retry.
+                if (response.statusCode() == 401 && attempt == 0 && auth.ensureValidToken()) {
+                    continue;
+                }
+
+                break;
+            }
 
             if (response.statusCode() != 200) {
                 System.err.println("[Stream Chat Bridge] Failed to send Twitch message. HTTP " + response.statusCode() + ": " + response.body());

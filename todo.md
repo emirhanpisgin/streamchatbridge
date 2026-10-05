@@ -25,11 +25,15 @@ repo. `plan.md` describes how the pending items are implemented.
 
 - [x] **SCB-4 · Strip `§` from incoming names/messages.** Verified live: a Twitch
   message containing `§c§l` rendered/echoed as `scb-sectest-cl-end` (no `§`).
-- [ ] **SCB-2 · Twitch token expiry.** Track `expiresAt`, refresh on expiry and any
-  401, `/oauth2/validate` at startup + hourly.
+- [x] **SCB-2 · Twitch token expiry.** `expiresAt` is persisted, refreshed within
+  5 min of expiry and on any 401 (sends + EventSub subscribe retry),
+  `/oauth2/validate` runs at startup and hourly. Verified live: a token file
+  without `expiresAt` was refreshed and rewritten at startup, echo still passed.
   *Done when:* a long session keeps sending/receiving without restart.
-- [ ] **SCB-3 · Detect dead Twitch connections.** Reconnect when nothing arrives
-  within `keepalive_timeout_seconds`.
+- [x] **SCB-3 · Detect dead Twitch connections.** A per-connection watchdog forces a
+  reconnect when nothing arrives within `keepalive_timeout_seconds` + 15 s
+  (Twitch keepalives otherwise reset the timer). Verified by compile + code path;
+  live Wi-Fi-toggle test is user-assisted.
   *Done when:* toggling Wi-Fi mid-session recovers within ~30 s.
 - [x] **SCB-8 · `displayTest="IGNORE_ALL_VERSION"`** in both mods.toml files
   (verified present in the collected Forge jar).

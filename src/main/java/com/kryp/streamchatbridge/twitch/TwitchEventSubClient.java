@@ -52,6 +52,10 @@ public final class TwitchEventSubClient {
 
     private volatile long connectionGeneration = 0;
 
+    private volatile long keepaliveTimeoutMs = 10_000L;
+
+    private volatile long lastMessageAt = 0L;
+
     public TwitchEventSubClient(TwitchAuth auth, BiConsumer<String, String> messageHandler) {
         this.auth = auth;
         this.messageHandler = messageHandler;
@@ -364,6 +368,14 @@ public final class TwitchEventSubClient {
 
         String sessionId = session.get("id").getAsString();
 
+        if (session.has("keepalive_timeout_seconds") && !session.get("keepalive_timeout_seconds").isJsonNull()) {
+            keepaliveTimeoutMs = session.get("keepalive_timeout_seconds").getAsLong() * 1000L;
+        }
+
+        lastMessageAt = System.currentTimeMillis();
+
+        startKeepaliveWatchdog(generation);
+
         if (twitchReconnect) {
             System.out.println("[Stream Chat Bridge] Twitch EventSub migration complete.");
 
@@ -375,6 +387,45 @@ public final class TwitchEventSubClient {
         }
 
         Threads.start("streamchatbridge-twitch-subscribe", () -> createChatSubscription(sessionId, generation));
+    }
+
+    /**
+     * Twitch sends keepalives every few seconds; if nothing arrives within the
+     * session's keepalive timeout, the socket is half-open (sleep, Wi-Fi switch)
+     * and must be replaced.
+     */
+    private void startKeepaliveWatchdog(long generation) {
+        Threads.start("streamchatbridge-twitch-keepalive", () -> {
+            while (true) {
+                try {
+                    Thread.sleep(5_000L);
+                } catch (InterruptedException e) {
+                    return;
+                }
+
+                synchronized (TwitchEventSubClient.this) {
+                    if (generation != connectionGeneration || shuttingDown || !shouldStayConnected) {
+                        return;
+                    }
+
+                    if (connectionState != ConnectionState.CONNECTED) {
+                        continue;
+                    }
+
+                    long silentFor = System.currentTimeMillis() - lastMessageAt;
+
+                    if (silentFor > keepaliveTimeoutMs + 15_000L) {
+                        System.out.println("[Stream Chat Bridge] EventSub silent for " + silentFor + "ms; reconnecting.");
+
+                        lastMessageAt = System.currentTimeMillis();
+
+                        reconnect();
+
+                        return;
+                    }
+                }
+            }
+        });
     }
 
     private void createChatSubscription(String sessionId, long generation) {
@@ -408,6 +459,13 @@ public final class TwitchEventSubClient {
             HttpRequest request = HttpRequest.newBuilder().uri(URI.create(SUBSCRIPTIONS_URL)).header("Authorization", "Bearer " + auth.getAccessToken()).header("Client-Id", TwitchAuth.CLIENT_ID).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body))).build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            // The token can expire while idle; refresh once and retry the subscription.
+            if (response.statusCode() == 401 && auth.ensureValidToken()) {
+                request = HttpRequest.newBuilder().uri(URI.create(SUBSCRIPTIONS_URL)).header("Authorization", "Bearer " + auth.getAccessToken()).header("Client-Id", TwitchAuth.CLIENT_ID).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body))).build();
+
+                response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            }
 
             if (generation != connectionGeneration) {
                 return;
@@ -563,6 +621,8 @@ public final class TwitchEventSubClient {
                 String message = buffer.toString();
 
                 buffer.setLength(0);
+
+                lastMessageAt = System.currentTimeMillis();
 
                 try {
                     handleMessage(message, generation, twitchReconnect);
