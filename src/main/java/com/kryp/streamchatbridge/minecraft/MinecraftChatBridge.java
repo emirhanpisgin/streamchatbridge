@@ -276,13 +276,25 @@ public final class MinecraftChatBridge {
             return;
         }
 
-        MutableComponent component = ScbText.literal(text);
+        MutableComponent component = ScbText.literal(sanitize(text));
 
         if (color != null) {
             component.withStyle(color);
         }
 
         result.append(component);
+    }
+
+    /**
+     * Minecraft renders {@code §} formatting codes even inside literal text, so
+     * viewer-supplied names and messages must not be able to inject styles.
+     */
+    private static String sanitize(String text) {
+        if (text.indexOf('\u00A7') < 0) {
+            return text;
+        }
+
+        return text.replace("\u00A7", "");
     }
 
     private static int firstIndex(int... indexes) {

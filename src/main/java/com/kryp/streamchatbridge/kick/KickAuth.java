@@ -45,7 +45,7 @@ public final class KickAuth {
      * These correspond to the permissions selected
      * for the user's Kick application.
      */
-    private static final String SCOPES = "user:read channel:read chat:write events:subscribe";
+    private static final String SCOPES = "user:read channel:read chat:write";
 
     private static final Gson GSON = new Gson();
 

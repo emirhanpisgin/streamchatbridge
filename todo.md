@@ -23,21 +23,23 @@ repo. `plan.md` describes how the pending items are implemented.
 
 ## Pending — being implemented now
 
-- [ ] **SCB-4 · Strip `§` from incoming names/messages.**
-  *Done when:* a message containing `§c§lhi` shows unformatted.
+- [x] **SCB-4 · Strip `§` from incoming names/messages.** Verified live: a Twitch
+  message containing `§c§l` rendered/echoed as `scb-sectest-cl-end` (no `§`).
 - [ ] **SCB-2 · Twitch token expiry.** Track `expiresAt`, refresh on expiry and any
   401, `/oauth2/validate` at startup + hourly.
   *Done when:* a long session keeps sending/receiving without restart.
 - [ ] **SCB-3 · Detect dead Twitch connections.** Reconnect when nothing arrives
   within `keepalive_timeout_seconds`.
   *Done when:* toggling Wi-Fi mid-session recovers within ~30 s.
-- [ ] **SCB-8 · `displayTest="IGNORE_ALL_VERSION"`** in both mods.toml files.
+- [x] **SCB-8 · `displayTest="IGNORE_ALL_VERSION"`** in both mods.toml files
+  (verified present in the collected Forge jar).
   *Done when:* putting the jar on a server produces no version warning.
 - [ ] **SCB-10 · Secrets out of `config/`** → `%APPDATA%\streamchatbridge\`, with
   migration of existing files.
   *Done when:* `config/` contains no tokens or secrets.
 - [ ] **SCB-11 · Revoke tokens on logout** (Twitch `/oauth2/revoke`, Kick revoke).
-- [ ] **SCB-12 · Drop `events:subscribe`** from Kick scopes.
+- [x] **SCB-12 · Drop `events:subscribe`** from Kick scopes (now
+  `user:read channel:read chat:write`).
 - [ ] **SCB-13 · SLF4J logging** instead of `System.out/err`; no auth-URL printing.
 - [ ] **T-5 · Cap newest ranges** at `>=26.3 <26.4` (fabric/forge/neoforge).
   *Done when:* no node has an open-ended range.

@@ -9,6 +9,7 @@ version = "${version}"
 description = "Bridges Minecraft chat with Twitch and Kick."
 license = "MIT"
 logoFile = "assets/streamchatbridge/icon.png"
+displayTest = "IGNORE_ALL_VERSION"
 
 [[dependencies.${id}]]
 modId = "minecraft"

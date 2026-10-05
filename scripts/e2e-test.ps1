@@ -25,6 +25,7 @@ param(
     [string]$Node = "",
     [string]$World = "TestWorld",
     [string]$Prefix = "",
+    [string]$ProbeText = "",
     [string]$BuildJdk = "",
     [int]$JoinTimeoutSec = 300,
     [int]$EchoTimeoutSec = 45,
@@ -70,6 +71,7 @@ if (-not $Prefix) {
 
 $Stamp = Get-Date -Format "HHmmss"
 $Probe = "e2e-$Stamp"
+if ($ProbeText) { $Probe = $ProbeText }
 
 function Write-Report {
     param([string]$Message)
