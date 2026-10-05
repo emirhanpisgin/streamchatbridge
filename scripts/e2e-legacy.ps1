@@ -204,7 +204,11 @@ function Post-Key {
 function Send-KeyWithFakeFocus {
     param([IntPtr]$Handle, [int]$Vk, [string]$SendKeysKey)
     if ($Focus) {
-        Force-Foreground -Handle $Handle | Out-Null
+        $focused = $false
+        for ($attempt = 0; $attempt -lt 5 -and -not $focused; $attempt++) {
+            $focused = Force-Foreground -Handle $Handle
+            if (-not $focused) { Start-Sleep -Milliseconds 500 }
+        }
         [System.Windows.Forms.SendKeys]::SendWait($SendKeysKey)
         Start-Sleep -Milliseconds 200
         return
@@ -239,7 +243,12 @@ function Capture-Window {
 function Send-ChatLine {
     param([IntPtr]$Handle, [string]$Text)
     if ($Focus) {
-        Force-Foreground -Handle $Handle | Out-Null
+        $focused = $false
+        for ($attempt = 0; $attempt -lt 5 -and -not $focused; $attempt++) {
+            $focused = Force-Foreground -Handle $Handle
+            if (-not $focused) { Start-Sleep -Milliseconds 500 }
+        }
+        if (-not $focused) { Write-Report "focus: could not foreground the game window" }
         # Per-char SendKeys sticks Shift on shifted characters (probe arrives as
         # T!E2E-...); paste the line from the clipboard instead.
         Set-Clipboard -Value $Text
