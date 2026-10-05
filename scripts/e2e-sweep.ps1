@@ -20,7 +20,8 @@ param(
     [ValidateSet("", "fabric", "forge", "neoforge")]
     [string]$Loader = "",
     [int]$TimeoutMinutes = 15,
-    [string]$LogDir = "build/e2e"
+    [string]$LogDir = "build/e2e",
+    [switch]$SkipEcho
 )
 
 $ErrorActionPreference = "Continue"
@@ -54,6 +55,7 @@ $matrix = @(
     @{ Node = "1.19.3-forge";   Mode = "server" }
     @{ Node = "1.19.4-forge";   Mode = "server" }
     @{ Node = "1.20-forge";     Mode = "server" }
+    @{ Node = "1.20.6-forge";   Mode = "server" }
     @{ Node = "1.21-forge";     Mode = "server" }
     @{ Node = "1.21.3-forge";   Mode = "server" }
     @{ Node = "1.21.6-forge";   Mode = "server" }
@@ -89,6 +91,7 @@ foreach ($entry in $selected) {
     if ($entry.Mode -eq "server") { $args += "-ServerJoin" }
     if ($entry.ContainsKey("World")) { $args += @("-BaseWorld", $entry.World) }
     if ($entry.ContainsKey("Focus") -and $entry.Focus) { $args += "-Focus" }
+    if ($SkipEcho) { $args += "-SkipEcho" }
 
     $out = Join-Path $LogDir "sweep-$($entry.Node).log"
     $err = Join-Path $LogDir "sweep-$($entry.Node).err"
