@@ -49,7 +49,8 @@ repo. `plan.md` describes how the pending items are implemented.
   `user:read channel:read chat:write`).
 - [x] **SCB-13 · Proper logging** — all 102 `System.out/err` sites now use the
   mod's logger; the full Kick authorization URL is no longer printed.
-- [ ] **T-5 · Cap newest ranges** at `>=26.3 <26.4` (fabric/forge/neoforge).
+- [x] **T-5 · Cap newest ranges** at `>=26.3 <26.4` (fabric/forge/neoforge);
+  boundary audit still passes.
   *Done when:* no node has an open-ended range.
 
 ## Parked
