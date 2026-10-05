@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.kick;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -42,7 +44,7 @@ public final class KickClient {
 
     public boolean setChannel(String channel) {
         if (!auth.isAuthenticated()) {
-            System.err.println("[Stream Chat Bridge] Cannot select Kick channel: account is not authenticated.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot select Kick channel: account is not authenticated.");
 
             return false;
         }
@@ -56,7 +58,7 @@ public final class KickClient {
         String accessToken = auth.getValidAccessToken();
 
         if (accessToken == null) {
-            System.err.println("[Stream Chat Bridge] Cannot select Kick channel: no valid access token.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot select Kick channel: no valid access token.");
 
             return false;
         }
@@ -69,7 +71,7 @@ public final class KickClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -77,7 +79,7 @@ public final class KickClient {
             JsonObject channelObject = getFirstChannel(response.body());
 
             if (channelObject == null) {
-                System.err.println("[Stream Chat Bridge] Kick channel not found: " + normalized);
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel not found: " + normalized);
 
                 return false;
             }
@@ -86,7 +88,7 @@ public final class KickClient {
                 return false;
             }
 
-            System.out.println("[Stream Chat Bridge] Kick channel selected: " + channelSlug + " (broadcaster " + broadcasterUserId + ")");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick channel selected: " + channelSlug + " (broadcaster " + broadcasterUserId + ")");
 
             return true;
 
@@ -96,7 +98,7 @@ public final class KickClient {
             return false;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
 
             return false;
         }
@@ -104,7 +106,7 @@ public final class KickClient {
 
     public boolean loadOwnChannel() {
         if (!auth.isAuthenticated()) {
-            System.err.println("[Stream Chat Bridge] Cannot load Kick channel: account is not authenticated.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot load Kick channel: account is not authenticated.");
 
             return false;
         }
@@ -112,7 +114,7 @@ public final class KickClient {
         String accessToken = auth.getValidAccessToken();
 
         if (accessToken == null) {
-            System.err.println("[Stream Chat Bridge] Cannot load Kick channel: no valid access token.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot load Kick channel: no valid access token.");
 
             return false;
         }
@@ -123,7 +125,7 @@ public final class KickClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -131,7 +133,7 @@ public final class KickClient {
             JsonObject channelObject = getFirstChannel(response.body());
 
             if (channelObject == null) {
-                System.err.println("[Stream Chat Bridge] Kick account has no channel.");
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick account has no channel.");
 
                 return false;
             }
@@ -145,7 +147,7 @@ public final class KickClient {
                 channelSlug = auth.getUsername();
             }
 
-            System.out.println("[Stream Chat Bridge] Kick channel selected: " + channelSlug + " (broadcaster " + broadcasterUserId + ")");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick channel selected: " + channelSlug + " (broadcaster " + broadcasterUserId + ")");
 
             return true;
 
@@ -155,7 +157,7 @@ public final class KickClient {
             return false;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
 
             return false;
         }
@@ -170,7 +172,7 @@ public final class KickClient {
 
         if (newBroadcasterUserId == null || newBroadcasterUserId.isBlank()) {
 
-            System.err.println("[Stream Chat Bridge] Kick channel response did not contain broadcaster_user_id.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel response did not contain broadcaster_user_id.");
 
             return false;
         }
@@ -189,7 +191,7 @@ public final class KickClient {
 
         if (root == null || !root.has("data") || !root.get("data").isJsonArray()) {
 
-            System.err.println("[Stream Chat Bridge] Kick channel lookup returned an invalid response: " + responseBody);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup returned an invalid response: " + responseBody);
 
             return null;
         }
@@ -240,13 +242,13 @@ public final class KickClient {
 
         if (content.length() > MAX_MESSAGE_LENGTH) {
 
-            System.err.println("[Stream Chat Bridge] Kick message is too long: " + content.length() + "/" + MAX_MESSAGE_LENGTH);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick message is too long: " + content.length() + "/" + MAX_MESSAGE_LENGTH);
 
             return false;
         }
 
         if (!auth.isAuthenticated()) {
-            System.err.println("[Stream Chat Bridge] Cannot send Kick message: account is not authenticated.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot send Kick message: account is not authenticated.");
 
             return false;
         }
@@ -260,7 +262,7 @@ public final class KickClient {
         String accessToken = auth.getValidAccessToken();
 
         if (accessToken == null) {
-            System.err.println("[Stream Chat Bridge] Cannot send Kick message: no valid access token.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot send Kick message: no valid access token.");
 
             return false;
         }
@@ -281,7 +283,7 @@ public final class KickClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Failed to send Kick chat message. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to send Kick chat message. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -290,7 +292,7 @@ public final class KickClient {
 
             if (root == null || !root.has("data") || !root.get("data").isJsonObject()) {
 
-                System.err.println("[Stream Chat Bridge] Kick returned an invalid chat response: " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick returned an invalid chat response: " + response.body());
 
                 return false;
             }
@@ -299,7 +301,7 @@ public final class KickClient {
 
             if (!data.has("is_sent") || data.get("is_sent").isJsonNull()) {
 
-                System.err.println("[Stream Chat Bridge] Kick chat response did not contain is_sent: " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chat response did not contain is_sent: " + response.body());
 
                 return false;
             }
@@ -307,19 +309,19 @@ public final class KickClient {
             boolean sent = data.get("is_sent").getAsBoolean();
 
             if (!sent) {
-                System.err.println("[Stream Chat Bridge] Kick accepted the request but did not send the message: " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick accepted the request but did not send the message: " + response.body());
 
                 return false;
             }
 
             String messageId = readString(data, "message_id");
 
-            System.out.println("[Stream Chat Bridge] Kick message sent" + (messageId != null ? ": " + messageId : "."));
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick message sent" + (messageId != null ? ": " + messageId : "."));
 
             return true;
 
         } catch (NumberFormatException e) {
-            System.err.println("[Stream Chat Bridge] Invalid Kick broadcaster user ID: " + broadcasterUserId);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Invalid Kick broadcaster user ID: " + broadcasterUserId);
 
             return false;
 
@@ -329,7 +331,7 @@ public final class KickClient {
             return false;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Failed to send Kick chat message: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to send Kick chat message: " + e.getMessage());
 
             return false;
         }

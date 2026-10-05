@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.kick;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.kryp.streamchatbridge.util.ConfigPaths;
@@ -11,7 +13,7 @@ import java.nio.file.StandardOpenOption;
 
 public final class KickCredentials {
 
-    private static final Path PATH = ConfigPaths.configDir().resolve("streamchatbridge-kick.json");
+    private static final Path PATH = ConfigPaths.migrateSecret("streamchatbridge-kick.json");
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -42,7 +44,7 @@ public final class KickCredentials {
             return credentials;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Failed to load Kick credentials: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to load Kick credentials: " + e.getMessage());
 
             return new KickCredentials();
         }
@@ -52,12 +54,14 @@ public final class KickCredentials {
         normalize();
 
         try {
-            Files.createDirectories(PATH.getParent());
+            ConfigPaths.secureDirectory(PATH.getParent());
 
             Files.writeString(PATH, GSON.toJson(this), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
+            ConfigPaths.secureFile(PATH);
+
         } catch (IOException e) {
-            System.err.println("[Stream Chat Bridge] Failed to save Kick credentials: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to save Kick credentials: " + e.getMessage());
         }
     }
 

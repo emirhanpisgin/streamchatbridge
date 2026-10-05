@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.twitch;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -38,25 +40,25 @@ public final class TwitchClient {
         String id = auth.findUserId(channel);
 
         if (id == null) {
-            System.err.println("[Stream Chat Bridge] Twitch channel not found: " + channel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel not found: " + channel);
             return false;
         }
 
         channelId = id;
 
-        System.out.println("[Stream Chat Bridge] Twitch channel set to: " + channel);
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch channel set to: " + channel);
 
         return true;
     }
 
     public boolean sendMessage(String message) {
         if (!auth.isAuthenticated()) {
-            System.err.println("[Stream Chat Bridge] Cannot send Twitch message: not authenticated.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot send Twitch message: not authenticated.");
             return false;
         }
 
         if (channelId == null) {
-            System.err.println("[Stream Chat Bridge] Cannot send Twitch message: no channel selected.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot send Twitch message: no channel selected.");
             return false;
         }
 
@@ -89,7 +91,7 @@ public final class TwitchClient {
             }
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Failed to send Twitch message. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to send Twitch message. HTTP " + response.statusCode() + ": " + response.body());
                 return false;
             }
 
@@ -112,7 +114,7 @@ public final class TwitchClient {
                         }
                     }
 
-                    System.err.println("[Stream Chat Bridge] Twitch rejected message: " + reason);
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch rejected message: " + reason);
 
                     return false;
                 }
@@ -121,7 +123,7 @@ public final class TwitchClient {
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Failed to send Twitch message: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to send Twitch message: " + e.getMessage());
 
             return false;
         }

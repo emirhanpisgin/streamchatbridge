@@ -38,13 +38,17 @@ repo. `plan.md` describes how the pending items are implemented.
 - [x] **SCB-8 · `displayTest="IGNORE_ALL_VERSION"`** in both mods.toml files
   (verified present in the collected Forge jar).
   *Done when:* putting the jar on a server produces no version warning.
-- [ ] **SCB-10 · Secrets out of `config/`** → `%APPDATA%\streamchatbridge\`, with
-  migration of existing files.
+- [x] **SCB-10 · Secrets out of `config/`** → `%APPDATA%\streamchatbridge\` (mac:
+  `~/Library/Application Support`, Linux: `$XDG_CONFIG_HOME`), owner-only perms
+  where supported, legacy files migrated automatically. Verified live: `config/`
+  keeps only `streamchatbridge.json`; both secret files moved; auth + echo pass.
   *Done when:* `config/` contains no tokens or secrets.
-- [ ] **SCB-11 · Revoke tokens on logout** (Twitch `/oauth2/revoke`, Kick revoke).
+- [x] **SCB-11 · Revoke tokens on logout** (Twitch `/oauth2/revoke`, Kick
+  `/oauth/revoke`, best-effort before deleting local copies).
 - [x] **SCB-12 · Drop `events:subscribe`** from Kick scopes (now
   `user:read channel:read chat:write`).
-- [ ] **SCB-13 · SLF4J logging** instead of `System.out/err`; no auth-URL printing.
+- [x] **SCB-13 · Proper logging** — all 102 `System.out/err` sites now use the
+  mod's logger; the full Kick authorization URL is no longer printed.
 - [ ] **T-5 · Cap newest ranges** at `>=26.3 <26.4` (fabric/forge/neoforge).
   *Done when:* no node has an open-ended range.
 

@@ -104,7 +104,7 @@ Set-Content -LiteralPath $optPath -Value $opt
 $rootCfg = Join-Path $Root "run\config"
 $nodeCfg = Join-Path $RunDir "config"
 New-Item -ItemType Directory -Force -Path $nodeCfg | Out-Null
-foreach ($f in @("streamchatbridge.json", "streamchatbridge-twitch.json", "streamchatbridge-kick.json")) {
+foreach ($f in @("streamchatbridge.json")) {
     $src = Join-Path $rootCfg $f
     $dst = Join-Path $nodeCfg $f
     if ((Test-Path $src) -and ((-not (Test-Path $dst)) -or ((Get-Item $src).LastWriteTime -gt (Get-Item $dst).LastWriteTime))) {
@@ -480,12 +480,3 @@ if (-not $LeaveOpen) {
 }
 
 [ScbWin32]::SetThreadExecutionState([uint32]2147483648) | Out-Null   # ES_CONTINUOUS (reset)
-
-# Token rotation: push the newest refresh token back to the root run dir.
-if ($Loader -eq "neoforge") {
-    $rootTok = Join-Path $rootCfg "streamchatbridge-twitch.json"
-    $nodeTok = Join-Path $nodeCfg "streamchatbridge-twitch.json"
-    if ((Test-Path $rootTok) -and (Test-Path $nodeTok) -and ((Get-Item $nodeTok).LastWriteTime -gt (Get-Item $rootTok).LastWriteTime)) {
-        Copy-Item -LiteralPath $nodeTok -Destination $rootTok -Force
-    }
-}

@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.twitch;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.kryp.streamchatbridge.util.BrowserUtils;
@@ -28,6 +30,7 @@ public final class TwitchAuth {
     private static final String DEVICE_URL = "https://id.twitch.tv/oauth2/device";
     private static final String TOKEN_URL = "https://id.twitch.tv/oauth2/token";
     private static final String VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
+    private static final String REVOKE_URL = "https://id.twitch.tv/oauth2/revoke";
     private static final String USERS_URL = "https://api.twitch.tv/helix/users";
 
     /** Refresh this long before the access token actually expires. */
@@ -35,7 +38,7 @@ public final class TwitchAuth {
 
     private static final long TOKEN_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000L;
 
-    private static final Path TOKEN_PATH = ConfigPaths.configDir().resolve("streamchatbridge-twitch.json");
+    private static final Path TOKEN_PATH = ConfigPaths.migrateSecret("streamchatbridge-twitch.json");
 
     private static final Gson GSON = new Gson();
 
@@ -98,7 +101,7 @@ public final class TwitchAuth {
             }
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Could not restore Twitch session: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not restore Twitch session: " + e.getMessage());
         }
 
         return false;
@@ -118,12 +121,12 @@ public final class TwitchAuth {
 
             int interval = device.get("interval").getAsInt();
 
-            System.out.println("[Stream Chat Bridge] Twitch authorization code: " + userCode);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch authorization code: " + userCode);
 
-            System.out.println("[Stream Chat Bridge] Open: " + verificationUri);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Open: " + verificationUri);
 
             if (!BrowserUtils.open(verificationUri)) {
-                System.out.println("[Stream Chat Bridge] Open the Twitch authorization URL manually.");
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Open the Twitch authorization URL manually.");
             }
 
             long deadline = System.currentTimeMillis() + expiresIn * 1000L;
@@ -165,13 +168,17 @@ public final class TwitchAuth {
             throw new IOException("Twitch authorization expired");
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Twitch authentication failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch authentication failed: " + e.getMessage());
 
             return false;
         }
     }
 
     public void logout() {
+        revokeToken(accessToken);
+
+        revokeToken(refreshToken);
+
         accessToken = null;
         refreshToken = null;
         expiresAtMillis = 0;
@@ -181,7 +188,24 @@ public final class TwitchAuth {
         try {
             Files.deleteIfExists(TOKEN_PATH);
         } catch (IOException e) {
-            System.err.println("[Stream Chat Bridge] Could not delete Twitch credentials: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not delete Twitch credentials: " + e.getMessage());
+        }
+    }
+
+    /** Best-effort revocation of a token at Twitch before the local copy is deleted. */
+    private void revokeToken(String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+
+        try {
+            String body = "client_id=" + encode(CLIENT_ID) + "&token=" + encode(token);
+
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(REVOKE_URL)).header("Content-Type", "application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+
+            httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+
+        } catch (Exception ignored) {
         }
     }
 
@@ -240,7 +264,7 @@ public final class TwitchAuth {
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Twitch token refresh failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch token refresh failed: " + e.getMessage());
 
             return false;
         }
@@ -272,7 +296,7 @@ public final class TwitchAuth {
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Twitch user lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch user lookup failed: " + e.getMessage());
 
             return false;
         }
@@ -288,9 +312,11 @@ public final class TwitchAuth {
 
         json.addProperty("expiresAt", expiresAtMillis);
 
-        Files.createDirectories(TOKEN_PATH.getParent());
+        ConfigPaths.secureDirectory(TOKEN_PATH.getParent());
 
         Files.writeString(TOKEN_PATH, GSON.toJson(json), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+        ConfigPaths.secureFile(TOKEN_PATH);
     }
 
     /**
@@ -402,7 +428,7 @@ public final class TwitchAuth {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Twitch channel lookup failed. HTTP " + response.statusCode());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel lookup failed. HTTP " + response.statusCode());
 
                 return null;
             }
@@ -417,7 +443,7 @@ public final class TwitchAuth {
             return json.getAsJsonArray("data").get(0).getAsJsonObject().get("id").getAsString();
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Twitch channel lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel lookup failed: " + e.getMessage());
 
             return null;
         }

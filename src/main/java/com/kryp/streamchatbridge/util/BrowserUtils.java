@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.util;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 //? if >=1.21.11 {
 import net.minecraft.util.Util;
 //?} else {
@@ -28,7 +30,7 @@ public final class BrowserUtils {
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Could not open browser automatically: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not open browser automatically: " + e.getMessage());
 
             return false;
         }

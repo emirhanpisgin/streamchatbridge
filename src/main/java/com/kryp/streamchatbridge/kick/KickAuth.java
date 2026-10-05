@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.kick;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.kryp.streamchatbridge.util.BrowserUtils;
 
 import com.google.gson.Gson;
@@ -30,10 +32,11 @@ import java.util.concurrent.TimeUnit;
 public final class KickAuth {
 
     private static final String AUTHORIZE_URL = "https://id.kick.com/oauth/authorize";
-
     private static final String TOKEN_URL = "https://id.kick.com/oauth/token";
 
     private static final String INTROSPECT_URL = "https://id.kick.com/oauth/token/introspect";
+
+    private static final String REVOKE_URL = "https://id.kick.com/oauth/revoke";
 
     private static final String API_URL = "https://api.kick.com/public/v1";
 
@@ -85,7 +88,7 @@ public final class KickAuth {
 
     public boolean authenticate() {
         if (!credentials.hasClientCredentials()) {
-            System.err.println("[Stream Chat Bridge] Kick client credentials are not configured.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick client credentials are not configured.");
 
             return false;
         }
@@ -111,9 +114,7 @@ public final class KickAuth {
 
             String authorizationUrl = AUTHORIZE_URL + "?response_type=code" + "&client_id=" + encode(credentials.clientId) + "&redirect_uri=" + encode(REDIRECT_URI) + "&scope=" + encode(SCOPES) + "&code_challenge=" + encode(codeChallenge) + "&code_challenge_method=S256" + "&state=" + encode(state);
 
-            System.out.println("[Stream Chat Bridge] Opening Kick authentication...");
-
-            System.out.println("[Stream Chat Bridge] Kick authorization URL: " + authorizationUrl);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Opening Kick authentication...");
 
             BrowserUtils.open(authorizationUrl);
 
@@ -126,7 +127,7 @@ public final class KickAuth {
             return loadCurrentUser();
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick authentication failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick authentication failed: " + e.getMessage());
 
             return false;
 
@@ -151,7 +152,7 @@ public final class KickAuth {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick token refresh failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick token refresh failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -173,12 +174,12 @@ public final class KickAuth {
 
             credentials.save();
 
-            System.out.println("[Stream Chat Bridge] Kick access token refreshed.");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick access token refreshed.");
 
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick token refresh failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick token refresh failed: " + e.getMessage());
 
             return false;
         }
@@ -207,7 +208,7 @@ public final class KickAuth {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick token exchange failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick token exchange failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -227,12 +228,12 @@ public final class KickAuth {
 
             credentials.save();
 
-            System.out.println("[Stream Chat Bridge] Kick tokens obtained.");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick tokens obtained.");
 
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick token exchange failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick token exchange failed: " + e.getMessage());
 
             return false;
         }
@@ -251,7 +252,7 @@ public final class KickAuth {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick user lookup failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick user lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
             }
@@ -271,17 +272,17 @@ public final class KickAuth {
 
             if (userId == null || username == null) {
 
-                System.err.println("[Stream Chat Bridge] Kick user response did not contain expected account information.");
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick user response did not contain expected account information.");
 
                 return false;
             }
 
-            System.out.println("[Stream Chat Bridge] Kick authenticated as: " + username);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick authenticated as: " + username);
 
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Kick user lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick user lookup failed: " + e.getMessage());
 
             return false;
         }
@@ -319,10 +320,31 @@ public final class KickAuth {
     }
 
     public void logout() {
+        revokeToken(credentials.accessToken);
+
+        revokeToken(credentials.refreshToken);
+
         userId = null;
         username = null;
 
         credentials.clearTokens();
+    }
+
+    /** Best-effort revocation of a token at Kick before the local copy is deleted. */
+    private void revokeToken(String token) {
+        if (token == null || token.isBlank() || !credentials.hasClientCredentials()) {
+            return;
+        }
+
+        try {
+            String body = "token=" + encode(token) + "&client_id=" + encode(credentials.clientId) + "&client_secret=" + encode(credentials.clientSecret);
+
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(REVOKE_URL)).header("Content-Type", "application/x-www-form-urlencoded").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+
+            httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+
+        } catch (Exception ignored) {
+        }
     }
 
     public void resetClientCredentials() {

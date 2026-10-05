@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.kick;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -74,7 +76,7 @@ public final class KickChatClient {
         String normalized = normalizeUsername(username);
 
         if (normalized == null) {
-            System.err.println("[Stream Chat Bridge] Cannot connect to Kick chat: username is missing.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot connect to Kick chat: username is missing.");
 
             return false;
         }
@@ -133,7 +135,7 @@ public final class KickChatClient {
                         return null;
                     });
 
-            System.out.println("[Stream Chat Bridge] Listening to Kick chat: " + resolvedChannelName);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Listening to Kick chat: " + resolvedChannelName);
 
             return true;
 
@@ -143,7 +145,7 @@ public final class KickChatClient {
                 return false;
             }
 
-            System.err.println("[Stream Chat Bridge] Could not connect to Kick chat: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not connect to Kick chat: " + e.getMessage());
 
             cleanupConnection();
 
@@ -163,7 +165,7 @@ public final class KickChatClient {
 
         webSocket = null;
 
-        System.err.println("[Stream Chat Bridge] Kick chat connection failed: " + error.getMessage());
+        StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chat connection failed: " + error.getMessage());
 
         setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -207,7 +209,7 @@ public final class KickChatClient {
                 setConnectionState(ConnectionState.CONNECTED);
             }
 
-            case "pusher:error" -> System.err.println("[Stream Chat Bridge] Kick Pusher error: " + root.get("data"));
+            case "pusher:error" -> StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick Pusher error: " + root.get("data"));
 
             case CHAT_EVENT -> {
                 JsonElement data = root.get("data");
@@ -283,7 +285,7 @@ public final class KickChatClient {
 
         reconnectScheduled = true;
 
-        System.out.println("[Stream Chat Bridge] Kick connection lost. Reconnecting in " + formatDelay(delay) + "...");
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick connection lost. Reconnecting in " + formatDelay(delay) + "...");
 
         Threads.start("streamchatbridge-kick-reconnect", () -> {
             try {
@@ -317,7 +319,7 @@ public final class KickChatClient {
 
                 cleanupConnection();
 
-                System.out.println("[Stream Chat Bridge] Reconnecting to Kick chat: " + targetUsername);
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Reconnecting to Kick chat: " + targetUsername);
 
                 connectInternal(targetUsername, generation);
             }
@@ -414,7 +416,7 @@ public final class KickChatClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[Stream Chat Bridge] Kick chatroom lookup failed. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chatroom lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return null;
             }
@@ -423,14 +425,14 @@ public final class KickChatClient {
 
             if (json == null || !json.has("id") || json.get("id").isJsonNull()) {
 
-                System.err.println("[Stream Chat Bridge] Kick chatroom lookup returned no ID.");
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chatroom lookup returned no ID.");
 
                 return null;
             }
 
             String id = json.get("id").getAsString();
 
-            System.out.println("[Stream Chat Bridge] Kick chatroom ID: " + id);
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick chatroom ID: " + id);
 
             return id;
 
@@ -440,7 +442,7 @@ public final class KickChatClient {
             return null;
 
         } catch (IOException | RuntimeException e) {
-            System.err.println("[Stream Chat Bridge] Kick chatroom lookup failed: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chatroom lookup failed: " + e.getMessage());
 
             return null;
         }
@@ -505,7 +507,7 @@ public final class KickChatClient {
             }
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Could not process Kick chat message: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not process Kick chat message: " + e.getMessage());
         }
     }
 
@@ -605,7 +607,7 @@ public final class KickChatClient {
                 try {
                     handlePusherMessage(message, generation);
                 } catch (Exception e) {
-                    System.err.println("[Stream Chat Bridge] Failed to handle Kick chat message: " + e.getMessage());
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to handle Kick chat message: " + e.getMessage());
                 }
             }
 
@@ -625,7 +627,7 @@ public final class KickChatClient {
                     webSocket = null;
                 }
 
-                System.out.println("[Stream Chat Bridge] Kick chat disconnected: " + statusCode + " " + reason);
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick chat disconnected: " + statusCode + " " + reason);
 
                 setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -646,7 +648,7 @@ public final class KickChatClient {
                     webSocket = null;
                 }
 
-                System.err.println("[Stream Chat Bridge] Kick chat error: " + error.getMessage());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chat error: " + error.getMessage());
 
                 setConnectionState(ConnectionState.DISCONNECTED);
 

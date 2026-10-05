@@ -47,7 +47,7 @@ public class StreamChatBridgeClient {
                 onTwitchAuthenticated();
 
             } else {
-                System.out.println("[Stream Chat Bridge] No valid Twitch session found.");
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] No valid Twitch session found.");
             }
         });
 
@@ -56,11 +56,11 @@ public class StreamChatBridgeClient {
                 onKickAuthenticated();
 
             } else {
-                System.out.println("[Stream Chat Bridge] No valid Kick session found.");
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] No valid Kick session found.");
             }
         });
 
-        System.out.println("[Stream Chat Bridge] Loaded");
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Loaded");
     }
 
     /*
@@ -96,12 +96,12 @@ public class StreamChatBridgeClient {
      */
 
     private static void onTwitchAuthenticated() {
-        System.out.println("[Stream Chat Bridge] Twitch authenticated as: " + TWITCH_AUTH.getUsername());
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch authenticated as: " + TWITCH_AUTH.getUsername());
 
         String configuredChannel = ConfigManager.get().twitchChannel;
 
         if (!TWITCH_CLIENT.setChannel(configuredChannel)) {
-            System.err.println("[Stream Chat Bridge] Could not use configured Twitch channel: " + configuredChannel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not use configured Twitch channel: " + configuredChannel);
 
             return;
         }
@@ -116,12 +116,12 @@ public class StreamChatBridgeClient {
      */
 
     private static void onKickAuthenticated() {
-        System.out.println("[Stream Chat Bridge] Kick authenticated as: " + KICK_AUTH.getUsername());
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Kick authenticated as: " + KICK_AUTH.getUsername());
 
         String username = KICK_AUTH.getUsername();
 
         if (username == null || username.isBlank()) {
-            System.err.println("[Stream Chat Bridge] Cannot start Kick chat: username is missing.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot start Kick chat: username is missing.");
 
             return;
         }
@@ -142,13 +142,13 @@ public class StreamChatBridgeClient {
         }
 
         if (!channelLoaded) {
-            System.err.println("[Stream Chat Bridge] Could not load Kick channel: " + channel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not load Kick channel: " + channel);
 
             return;
         }
 
         if (!KICK_CHAT.connect(channel)) {
-            System.err.println("[Stream Chat Bridge] Could not connect to Kick chat: " + channel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not connect to Kick chat: " + channel);
         }
     }
 

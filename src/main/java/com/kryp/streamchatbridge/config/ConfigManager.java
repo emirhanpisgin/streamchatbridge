@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.config;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -54,7 +56,7 @@ public final class ConfigManager {
             }
 
         } catch (Exception e) {
-            System.err.println("[Stream Chat Bridge] Failed to load config: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to load config: " + e.getMessage());
 
             config = new ModConfig();
         }
@@ -110,7 +112,7 @@ public final class ConfigManager {
         config.incomingPlatformLabel = null;
         config.incomingMessageFormat = null;
 
-        System.out.println("[Stream Chat Bridge] Migrated legacy config to platform-specific settings.");
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Migrated legacy config to platform-specific settings.");
     }
 
     private static String getString(JsonObject object, String key) {
@@ -148,7 +150,7 @@ public final class ConfigManager {
             Files.writeString(CONFIG_PATH, GSON.toJson(root));
 
         } catch (IOException e) {
-            System.err.println("[Stream Chat Bridge] Failed to save config: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to save config: " + e.getMessage());
         }
     }
 

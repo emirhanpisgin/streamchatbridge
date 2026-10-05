@@ -162,26 +162,9 @@ function Send-ChatLine {
     [ScbWin32]::PostMessage($Handle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 }
 
-# Twitch rotates refresh tokens; every run dir has its own token file. Keep the
-# node's copy in sync with the newest one so a refresh in one loader doesn't
-# leave the others unauthenticated.
-$rootToken = Join-Path $Root "run\config\streamchatbridge-twitch.json"
-$nodeToken = Join-Path $RunDir "config\streamchatbridge-twitch.json"
-if ((-not $Attach) -and ($rootToken -ne $nodeToken) -and (Test-Path $rootToken) -and (Test-Path $nodeToken)) {
-    $rootText = Get-Content -LiteralPath $rootToken -Raw
-    $nodeText = Get-Content -LiteralPath $nodeToken -Raw
-    if ($rootText -ne $nodeText) {
-        if ((Get-Item $rootToken).LastWriteTime -gt (Get-Item $nodeToken).LastWriteTime) {
-            Copy-Item -LiteralPath $rootToken -Destination $nodeToken -Force
-            Write-Report "token: synced root -> $Node"
-        } else {
-            Copy-Item -LiteralPath $nodeToken -Destination $rootToken -Force
-            Write-Report "token: synced $Node -> root"
-        }
-        (Get-Item $nodeToken).LastWriteTime = Get-Date
-        (Get-Item $rootToken).LastWriteTime = Get-Date
-    }
-}
+# Platform tokens live in the shared per-user secret dir
+# (%APPDATA%\streamchatbridge on Windows), so every instance is authenticated
+# with the same session and no per-run-dir syncing is needed.
 
 Write-Report "=== e2e $Node (world=$World, prefix='$Prefix', probe=$Probe, input=$(if ($Focus) { 'sendkeys' } else { 'postmessage' })) ==="
 

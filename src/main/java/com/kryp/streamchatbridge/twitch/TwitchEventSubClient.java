@@ -1,5 +1,7 @@
 package com.kryp.streamchatbridge.twitch;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.kryp.streamchatbridge.util.Threads;
@@ -170,7 +172,7 @@ public final class TwitchEventSubClient {
 
     private boolean canConnect() {
         if (!auth.isAuthenticated()) {
-            System.err.println("[Stream Chat Bridge] Cannot connect to Twitch chat: not authenticated.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot connect to Twitch chat: not authenticated.");
 
             setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -178,7 +180,7 @@ public final class TwitchEventSubClient {
         }
 
         if (channelId == null || channelId.isBlank()) {
-            System.err.println("[Stream Chat Bridge] Cannot connect to Twitch chat: no channel selected.");
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot connect to Twitch chat: no channel selected.");
 
             setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -200,9 +202,9 @@ public final class TwitchEventSubClient {
         setConnectionState(ConnectionState.CONNECTING);
 
         if (twitchReconnect) {
-            System.out.println("[Stream Chat Bridge] Migrating Twitch EventSub connection...");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Migrating Twitch EventSub connection...");
         } else {
-            System.out.println("[Stream Chat Bridge] Connecting to Twitch EventSub...");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Connecting to Twitch EventSub...");
         }
 
         EventSubSocketListener listener = new EventSubSocketListener(generation, twitchReconnect);
@@ -221,7 +223,7 @@ public final class TwitchEventSubClient {
 
         webSocket = null;
 
-        System.err.println("[Stream Chat Bridge] EventSub connection failed: " + error.getMessage());
+        StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] EventSub connection failed: " + error.getMessage());
 
         setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -239,7 +241,7 @@ public final class TwitchEventSubClient {
 
         reconnectScheduled = true;
 
-        System.out.println("[Stream Chat Bridge] Twitch connection lost. Reconnecting in " + formatDelay(delay) + "...");
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch connection lost. Reconnecting in " + formatDelay(delay) + "...");
 
         Threads.start("streamchatbridge-twitch-reconnect", () -> {
             try {
@@ -306,7 +308,7 @@ public final class TwitchEventSubClient {
             return;
         }
 
-        System.out.println("[Stream Chat Bridge] Twitch requested EventSub migration.");
+        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch requested EventSub migration.");
 
         connectTo(reconnectUrl, true);
     }
@@ -377,7 +379,7 @@ public final class TwitchEventSubClient {
         startKeepaliveWatchdog(generation);
 
         if (twitchReconnect) {
-            System.out.println("[Stream Chat Bridge] Twitch EventSub migration complete.");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch EventSub migration complete.");
 
             resetReconnectBackoff();
 
@@ -415,7 +417,7 @@ public final class TwitchEventSubClient {
                     long silentFor = System.currentTimeMillis() - lastMessageAt;
 
                     if (silentFor > keepaliveTimeoutMs + 15_000L) {
-                        System.out.println("[Stream Chat Bridge] EventSub silent for " + silentFor + "ms; reconnecting.");
+                        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] EventSub silent for " + silentFor + "ms; reconnecting.");
 
                         lastMessageAt = System.currentTimeMillis();
 
@@ -472,7 +474,7 @@ public final class TwitchEventSubClient {
             }
 
             if (response.statusCode() != 202) {
-                System.err.println("[Stream Chat Bridge] Failed to subscribe to Twitch chat. HTTP " + response.statusCode() + ": " + response.body());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to subscribe to Twitch chat. HTTP " + response.statusCode() + ": " + response.body());
 
                 WebSocket socket = webSocket;
 
@@ -489,7 +491,7 @@ public final class TwitchEventSubClient {
                 return;
             }
 
-            System.out.println("[Stream Chat Bridge] Twitch chat subscription active.");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch chat subscription active.");
 
             resetReconnectBackoff();
 
@@ -500,7 +502,7 @@ public final class TwitchEventSubClient {
                 return;
             }
 
-            System.err.println("[Stream Chat Bridge] Failed to create Twitch chat subscription: " + e.getMessage());
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to create Twitch chat subscription: " + e.getMessage());
 
             WebSocket socket = webSocket;
 
@@ -521,7 +523,7 @@ public final class TwitchEventSubClient {
             return;
         }
 
-        System.err.println("[Stream Chat Bridge] Twitch EventSub subscription revoked.");
+        StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch EventSub subscription revoked.");
 
         shouldStayConnected = false;
         reconnectScheduled = false;
@@ -603,7 +605,7 @@ public final class TwitchEventSubClient {
                 webSocket = socket;
             }
 
-            System.out.println("[Stream Chat Bridge] EventSub WebSocket opened.");
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] EventSub WebSocket opened.");
 
             socket.request(1);
         }
@@ -627,7 +629,7 @@ public final class TwitchEventSubClient {
                 try {
                     handleMessage(message, generation, twitchReconnect);
                 } catch (Exception e) {
-                    System.err.println("[Stream Chat Bridge] Failed to handle EventSub message: " + e.getMessage());
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to handle EventSub message: " + e.getMessage());
                 }
             }
 
@@ -647,7 +649,7 @@ public final class TwitchEventSubClient {
                     webSocket = null;
                 }
 
-                System.out.println("[Stream Chat Bridge] EventSub disconnected: " + statusCode + " " + reason);
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] EventSub disconnected: " + statusCode + " " + reason);
 
                 setConnectionState(ConnectionState.DISCONNECTED);
 
@@ -668,7 +670,7 @@ public final class TwitchEventSubClient {
                     webSocket = null;
                 }
 
-                System.err.println("[Stream Chat Bridge] EventSub error: " + error.getMessage());
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] EventSub error: " + error.getMessage());
 
                 setConnectionState(ConnectionState.DISCONNECTED);
 

@@ -175,8 +175,9 @@ $jar = Join-Path $Root "build\libs\1.0.0\streamchatbridge-$Loader-1.0.0+$NodeMc.
 if (-not (Test-Path $jar)) { throw "Missing built jar: $jar" }
 Copy-Item $jar $ModsDir -Force
 
-# --- Twitch config/token seed (same files the dev runs use) --------------------
-foreach ($f in @("streamchatbridge.json", "streamchatbridge-twitch.json")) {
+# --- Twitch config seed (settings only; platform tokens live in the shared
+#     per-user secret dir, %APPDATA%\streamchatbridge on Windows) ----------------
+foreach ($f in @("streamchatbridge.json")) {
     $src = Join-Path $Root "run\config\$f"
     if (Test-Path $src) { Copy-Item $src (Join-Path $Dir "config\$f") -Force }
 }
