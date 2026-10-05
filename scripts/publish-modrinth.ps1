@@ -11,22 +11,97 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$Root = Split-Path $PSScriptRoot -Parent
+Set-Location $Root
 $api = "https://api.modrinth.com/v2"
 $fabricApiProjectId = "P7dR8mSH"
 
 if (-not $ArtifactsDir) {
-    $ArtifactsDir = Join-Path (Split-Path $PSScriptRoot -Parent) "build\libs\$Version"
+    $ArtifactsDir = Join-Path $Root "build\libs\$Version"
 }
 $ArtifactsDir = (Resolve-Path $ArtifactsDir).Path
 
 if (-not $Changelog) { $Changelog = "Release $Version" }
 
-# game_versions each node's jar claims. Keep these in sync with mod.mc_compat in
-# stonecutter.properties.toml and with the node list in settings.gradle.kts.
-$targets = switch ($Loader) {
-    "forge" { @(@{ Mc = "26.1"; Games = @("26.1", "26.1.1", "26.1.2", "26.2", "26.3") }) }
-    "neoforge" { @(@{ Mc = "26.1"; Games = @("26.1", "26.1.1", "26.1.2", "26.2", "26.3") }) }
-    default { @(@{ Mc = "26.2"; Games = @("26.2", "26.3") }) }
+# ---------------------------------------------------------------------------
+# Targets are derived from the permanent nodes in stonecutter.properties.toml:
+# one Modrinth version per node jar, with the game versions its mod.mc_compat
+# range covers (only versions where that loader has a build).
+# ---------------------------------------------------------------------------
+
+function Get-PermanentNodes([string]$loader) {
+    $out = @()
+    $mc = ""
+    $inSection = $false
+    foreach ($line in Get-Content (Join-Path $Root "stonecutter.properties.toml")) {
+        if ($line -match ('^\[' + $loader + '\.\"([^\"]+)\"\]')) { $inSection = $true; $mc = $Matches[1]; continue }
+        if ($line -match '^\[') { $inSection = $false }
+        if ($inSection -and $line -match '^mod\.mc_compat\s*=\s*"([^"]+)"') {
+            $out += [pscustomobject]@{ Mc = $mc; Compat = $Matches[1] }
+        }
+    }
+    return $out
+}
+
+function Get-ModrinthReleaseTags() {
+    $tags = Invoke-RestMethod "$api/tag/game_version" -TimeoutSec 60
+    return @($tags | Where-Object { $_.version_type -eq "release" } | ForEach-Object { $_.version })
+}
+
+function Get-ForgeMcVersions() {
+    $xml = [xml](Invoke-WebRequest "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml" -UseBasicParsing -TimeoutSec 60).Content
+    $set = @{}
+    foreach ($v in $xml.metadata.versioning.versions.version) {
+        if ($v -match '^([0-9][0-9.]*)-') { $set[$Matches[1]] = $true }
+    }
+    return $set
+}
+
+function Get-NeoForgeMcVersions() {
+    $xml = [xml](Invoke-WebRequest "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml" -UseBasicParsing -TimeoutSec 60).Content
+    $set = @{}
+    $unusable = @("1.20.2", "1.20.3", "1.20.5")
+    foreach ($v in $xml.metadata.versioning.versions.version) {
+        if ($v -match '^(\d+)\.(\d+)\.(\d+)') {
+            $major = [int]$Matches[1]; $minor = [int]$Matches[2]; $patch = [int]$Matches[3]
+            $mc = if ($major -le 25) {
+                if ($minor -eq 0) { "1.$major" } else { "1.$major.$minor" }
+            } else {
+                if ($patch -eq 0) { if ($minor -eq 0) { "$major" } else { "$major.$minor" } } else { "$major.$minor.$patch" }
+            }
+            if ($unusable -notcontains $mc) { $set[$mc] = $true }
+        }
+    }
+    return $set
+}
+
+function Get-GamesInRange([string]$compat, [string[]]$tags, $loaderHas) {
+    $lower = $null; $upper = $null
+    if ($compat -match '>=\s*([0-9][0-9.]*)') { $lower = $Matches[1] }
+    if ($compat -match '<\s*([0-9][0-9.]*)') { $upper = $Matches[1] }
+    $games = @()
+    foreach ($t in $tags) {
+        try { $tv = [version]$t } catch { continue }
+        if ($lower -and $tv -lt [version]$lower) { continue }
+        if ($upper -and $tv -ge [version]$upper) { continue }
+        if ($loaderHas -and -not $loaderHas.ContainsKey($t)) { continue }
+        $games += $t
+    }
+    return $games
+}
+
+$allTags = Get-ModrinthReleaseTags
+$loaderHas = switch ($Loader) {
+    "forge" { Get-ForgeMcVersions }
+    "neoforge" { Get-NeoForgeMcVersions }
+    default { $null }
+}
+
+$targets = @()
+foreach ($node in Get-PermanentNodes $Loader) {
+    $games = Get-GamesInRange $node.Compat $allTags $loaderHas
+    if ($games.Count -eq 0) { Write-Warning "No game versions for $Loader $($node.Mc) ($($node.Compat))"; continue }
+    $targets += [pscustomobject]@{ Mc = $node.Mc; Games = $games }
 }
 
 $headers = @{ "User-Agent" = "$ProjectSlug-publish/$Version" }
@@ -38,17 +113,21 @@ function Get-Json([string]$path) {
 }
 
 "== Validating project =="
+$project = $null
 try {
     $project = Get-Json "/project/$ProjectSlug"
     "Project: $($project.title) ($($project.id))"
 } catch {
-    throw "Project '$ProjectSlug' not found or not accessible: $_"
+    if ($DryRun) {
+        Write-Warning "Project '$ProjectSlug' not found - dry run continues without it"
+    } else {
+        throw "Project '$ProjectSlug' not found or not accessible: $_"
+    }
 }
 
-$tags = @((Get-Json "/tag/game_version") | ForEach-Object { $_.version })
 foreach ($t in $targets) {
     foreach ($g in $t.Games) {
-        if ($tags -notcontains $g) { Write-Warning "Game version tag '$g' does not exist on Modrinth" }
+        if ($allTags -notcontains $g) { Write-Warning "Game version tag '$g' does not exist on Modrinth" }
     }
 }
 
@@ -57,7 +136,7 @@ if (-not $Token) {
     $DryRun = $true
 }
 
-$allVersions = @(Get-Json "/project/$ProjectSlug/version")
+$allVersions = if ($project) { @(Get-Json "/project/$ProjectSlug/version") } else { @() }
 
 foreach ($t in $targets) {
     $mc = $t.Mc
@@ -96,10 +175,10 @@ foreach ($t in $targets) {
         featured         = $false
         status           = "listed"
         requested_status = "listed"
-        project_id       = $project.id
+        project_id       = if ($project) { $project.id } else { "dry-run" }
         file_parts       = @("file1")
         primary_file     = "file1"
-        environment      = "server_only_client_optional"
+        environment      = "client_only"
         file_types       = @{}
     }
     if ($IncludeSources -and (Test-Path $srcPath)) {
@@ -110,7 +189,7 @@ foreach ($t in $targets) {
     $dataJson = $data | ConvertTo-Json -Depth 6
 
     if ($DryRun) {
-        "[DRY-RUN] would publish $versionNumber ($jarName, sha1=$sha1) games=[$($t.Games -join ',')] loaders=[$Loader] deps=$($deps.Count)"
+        "[DRY-RUN] would publish $versionNumber ($jarName, sha1=$sha1) games=[$($t.Games -join ',')] loaders=[$Loader] deps=$($deps.Count) env=client_only"
         continue
     }
 
