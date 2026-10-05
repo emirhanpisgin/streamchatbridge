@@ -30,7 +30,18 @@ param(
     [switch]$Focus,
     [switch]$NoScreen,
     [switch]$ServerJoin,
-    [switch]$LeaveOpen
+    [switch]$LeaveOpen,
+    [switch]$SkipEcho,
+
+    # Production-jar mode: run a prebuilt .cmd instead of a Gradle dev client,
+    # with the game directory and report/screenshot names given explicitly.
+    [string]$ClientCmdFile = "",
+    [string]$RunDirOverride = "",
+    [string]$Label = "",
+
+    # Range tests run a node's jar on a different MC version than the node's; the
+    # server must match the *client* version.
+    [string]$ServerMc = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -61,20 +72,23 @@ if (-not $BuildJdk) {
 }
 $env:JAVA_HOME = $BuildJdk
 
-$ServerJdk = if ($McV -ge [version]"26.1") { "C:\Program Files\Java\jdk-25.0.2" }
-    elseif ($McV -ge [version]"1.20.5") { "C:\Program Files\Java\jdk-21" }
+if (-not $ServerMc) { $ServerMc = $Mc }
+$ServerMcV = [version]$ServerMc
+$ServerJdk = if ($ServerMcV -ge [version]"26.1") { "C:\Program Files\Java\jdk-25.0.2" }
+    elseif ($ServerMcV -ge [version]"1.20.5") { "C:\Program Files\Java\jdk-21" }
     else { "C:\Program Files\Java\jdk-17" }
 if (-not (Test-Path (Join-Path $ServerJdk "bin\java.exe"))) { throw "Server JDK not found at $ServerJdk" }
 $ServerJava = Join-Path $ServerJdk "bin\java.exe"
 
-$RunDir = if ($Loader -eq "neoforge") { Join-Path $Root "versions\$Node\run" } else { Join-Path $Root "run" }
+if (-not $Label) { $Label = $Node }
+$RunDir = if ($RunDirOverride) { $RunDirOverride } elseif ($Loader -eq "neoforge") { Join-Path $Root "versions\$Node\run" } else { Join-Path $Root "run" }
 $ClientLog = Join-Path $RunDir "logs\latest.log"
-$ServerDir = Join-Path $Root "build\e2e\server-$Mc"
+$ServerDir = Join-Path $Root "build\e2e\server-$ServerMc"
 $ServerLog = Join-Path $ServerDir "logs\latest.log"
-$OutLog = Join-Path $Root "build\e2e-$Node.out.log"
-$ErrLog = Join-Path $Root "build\e2e-$Node.err.log"
-$ServerOut = Join-Path $Root "build\e2e\server-$Mc.out.log"
-$ReportPath = Join-Path $Root "build\e2e\$Node.log"
+$OutLog = Join-Path $Root "build\e2e-$Label.out.log"
+$ErrLog = Join-Path $Root "build\e2e-$Label.err.log"
+$ServerOut = Join-Path $Root "build\e2e\server-$ServerMc.out.log"
+$ReportPath = Join-Path $Root "build\e2e\$Label.log"
 $ShotDir = Join-Path $Root "build\e2e\screenshots"
 New-Item -ItemType Directory -Force -Path (Split-Path $ReportPath -Parent), $ShotDir | Out-Null
 
@@ -108,10 +122,10 @@ if (-not $Prefix) {
 
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { throw "Port $Port is already in use" }
 
-$ServerJar = Join-Path $Root "build\.cache\server-$Mc.jar"
+$ServerJar = Join-Path $Root "build\.cache\server-$ServerMc.jar"
 if (-not $UseQuickPlay -and -not (Test-Path $ServerJar)) {
     $manifest = Invoke-RestMethod "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json" -TimeoutSec 30
-    $entry = $manifest.versions | Where-Object { $_.id -eq $Mc } | Select-Object -First 1
+    $entry = $manifest.versions | Where-Object { $_.id -eq $ServerMc } | Select-Object -First 1
     $json = Invoke-RestMethod $entry.url -TimeoutSec 30
     Invoke-WebRequest $json.downloads.server.url -OutFile $ServerJar -TimeoutSec 900
 }
@@ -254,7 +268,7 @@ function Send-ChatLine {
 
 # Keep the display/system awake: display sleep or lock makes the 26.3 render
 # backend throw "Cannot acquire minimized window" mid-join on unattended runs.
-[ScbWin32]::SetThreadExecutionState(0x80000003) | Out-Null   # CONTINUOUS|SYSTEM|DISPLAY
+[ScbWin32]::SetThreadExecutionState([uint32]2147483651) | Out-Null   # CONTINUOUS|SYSTEM|DISPLAY
 
 Write-Report "=== e2e-legacy $Node (mc=$Mc, loader=$Loader, port=$Port, prefix='$Prefix', probe=$Probe, input=$(if ($Focus) { 'sendkeys' } else { 'postmessage' })) ==="
 
@@ -310,12 +324,17 @@ motd=scb e2e
 
 # --- dev client ----------------------------------------------------------------
 Remove-Item -LiteralPath $ClientLog -Force -ErrorAction SilentlyContinue
-$clientArgs = @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "--console=plain")
-if ($UseQuickPlay) { $clientArgs += "-PscbQuickPlay=$WorldName" } else { $clientArgs += "-PscbServerJoin=localhost:$Port" }
 $clientStart = Get-Date
-$p = Start-Process -FilePath (Join-Path $Root "gradlew.bat") `
-    -ArgumentList $clientArgs -WorkingDirectory $Root `
-    -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
+if ($ClientCmdFile) {
+    $p = Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "`"$ClientCmdFile`"") `
+        -WorkingDirectory $Root -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
+} else {
+    $clientArgs = @("--no-daemon", "--no-configuration-cache", ":${Node}:runClient", "--console=plain")
+    if ($UseQuickPlay) { $clientArgs += "-PscbQuickPlay=$WorldName" } else { $clientArgs += "-PscbServerJoin=localhost:$Port" }
+    $p = Start-Process -FilePath (Join-Path $Root "gradlew.bat") `
+        -ArgumentList $clientArgs -WorkingDirectory $Root `
+        -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -PassThru -WindowStyle Hidden
+}
 
 $joined = $false
 $joinLog = if ($UseQuickPlay) { $ClientLog } else { $ServerLog }
@@ -373,20 +392,25 @@ if ($joined) {
         Write-Report "sent: /scb status"
 
         $echo = $false
-        $firstDeadline = (Get-Date).AddSeconds(30)
-        while ((Get-Date) -lt $firstDeadline) {
-            Start-Sleep -Seconds 3
-            if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
-        }
-        if (-not $echo) {
-            # Input/Twitch hiccups happen (26.3 focus races); retry the probe once.
-            Write-Report "echo: no reply after 30s, resending probe"
-            Send-ChatLine -Handle $hwnd -Text "$Prefix$Probe"
-        }
-        $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
-        while (-not $echo -and (Get-Date) -lt $echoDeadline) {
-            Start-Sleep -Seconds 3
-            if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
+        if ($SkipEcho) {
+            Write-Report "echo: skipped (Twitch session not required)"
+            $echo = $true
+        } else {
+            $firstDeadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $firstDeadline) {
+                Start-Sleep -Seconds 3
+                if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
+            }
+            if (-not $echo) {
+                # Input/Twitch hiccups happen (26.3 focus races); retry the probe once.
+                Write-Report "echo: no reply after 30s, resending probe"
+                Send-ChatLine -Handle $hwnd -Text "$Prefix$Probe"
+            }
+            $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
+            while (-not $echo -and (Get-Date) -lt $echoDeadline) {
+                Start-Sleep -Seconds 3
+                if (Select-String -Path $ClientLog -Pattern "\[Twitch\].*$Probe" -Quiet -ErrorAction SilentlyContinue) { $echo = $true; break }
+            }
         }
 
         if ($UseQuickPlay) {
@@ -398,7 +422,7 @@ if ($joined) {
         }
         $status = [bool](Select-String -Path $ClientLog -Pattern "Minecraft . Twitch: ON|Minecraft → Twitch: ON" -Quiet -ErrorAction SilentlyContinue)
 
-        Write-Report "checks: intercepted=$( -not $serverGot ) platform-echo=$echo scb-status=$status"
+        Write-Report "checks: intercepted=$( -not $serverGot ) platform-echo=$(if ($SkipEcho) { 'skipped' } else { $echo }) scb-status=$status"
 
         if (-not $NoScreen) {
             $shotBefore = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
@@ -408,7 +432,7 @@ if ($joined) {
             Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x71 -SendKeysKey "{F2}"   # F2 screenshots
             Start-Sleep -Seconds 2
             $shots = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)
-            $dest = Join-Path $ShotDir "$Node.png"
+            $dest = Join-Path $ShotDir "$Label.png"
             if ($shots.Count -gt 0) {
                 Copy-Item -LiteralPath $shots[0].FullName -Destination $dest -Force
                 $size = [math]::Round((Get-Item $dest).Length / 1KB)
@@ -446,7 +470,7 @@ if (-not $LeaveOpen) {
     Write-Report "client and server left running"
 }
 
-[ScbWin32]::SetThreadExecutionState([uint32]0x80000000) | Out-Null   # ES_CONTINUOUS (reset)
+[ScbWin32]::SetThreadExecutionState([uint32]2147483648) | Out-Null   # ES_CONTINUOUS (reset)
 
 # Token rotation: push the newest refresh token back to the root run dir.
 if ($Loader -eq "neoforge") {

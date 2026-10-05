@@ -4,6 +4,7 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion
 plugins {
     id("java")
     id("net.minecraftforge.gradle") version "7.0.40"
+    id("net.minecraftforge.renamer") version "1.1.2"
     id("forge-mutex")
 }
 
@@ -122,8 +123,10 @@ if (sc.current.parsed >= "1.21.1" && sc.current.parsed < "1.21.7") {
     }
 }
 
+val forgeDependency = minecraft.dependency("net.minecraftforge:forge:${sc.current.version}-${property("deps.forge_loader")}")
+
 dependencies {
-    implementation(minecraft.dependency("net.minecraftforge:forge:${sc.current.version}-${property("deps.forge_loader")}"))
+    implementation(forgeDependency)
     // Mixin 0.8.x's service bootstrap requires LaunchClassLoader on the classpath for
     // legacy (launchwrapper-based) Forge; excluded LWJGL 2 collides with Forge's LWJGL 3.
     if (sc.current.parsed < "1.17") {
@@ -142,6 +145,21 @@ dependencies {
 java {
     withSourcesJar()
 }
+
+// Forge switched to official names at runtime with Forge 1.20.6 (no 1.20.5 build
+// exists); below that, production runs SRG names and the dev-mapped jar would
+// crash with NoSuchMethodError.
+// FG7 has no built-in reobf, so use the renamer plugin with the mavenizer's
+// SRG mapping (same mapping the official MDK examples use).
+if (sc.current.parsed < "1.20.6") {
+    val renamer = extensions.getByType<net.minecraftforge.renamer.gradle.RenamerExtension>()
+    renamer.mappings(forgeDependency.toSrgFile)
+    renamer.classes("reobfJar", tasks.named<Jar>("jar")) {
+        map.from(forgeDependency.toSrgFile)
+        archiveClassifier.set("srg")
+    }
+}
+val reobfTaskProvider = if (sc.current.parsed < "1.20.6") tasks.named("reobfJar") else null
 
 // Forge 1.20.3+ FML discovers dev-run mods per classpath entry and expects each mod
 // file (directory) to contain BOTH classes and resources (the old MOD_CLASSES
@@ -203,7 +221,14 @@ tasks {
         description = "Builds mod jars and copies results to `build/libs/{mod version}/`"
 
         inputs.property("version", project.property("mod.version"))
-        from(jar.flatMap { it.archiveFile }, named<Jar>("sourcesJar").flatMap { it.archiveFile })
+        // Forge <=1.20.4 runs SRG names in production; ship the reobfuscated jar.
+        if (reobfTaskProvider != null) {
+            dependsOn(reobfTaskProvider)
+            from(reobfTaskProvider, named<Jar>("sourcesJar").flatMap { it.archiveFile })
+            rename { if (it.endsWith("-srg.jar")) it.removeSuffix("-srg.jar") + ".jar" else it }
+        } else {
+            from(jar.flatMap { it.archiveFile }, named<Jar>("sourcesJar").flatMap { it.archiveFile })
+        }
         into(rootProject.layout.buildDirectory.file("libs/${project.property("mod.version")}"))
     }
 }

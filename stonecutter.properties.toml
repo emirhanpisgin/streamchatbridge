@@ -83,7 +83,7 @@ pack_format = 13
 ["1.20"]
 
 [forge."1.20"]
-mod.mc_compat = ">=1.20 <1.21"
+mod.mc_compat = ">=1.20 <1.20.6"
 deps.forge_loader = "46.0.14"
 deps.forge_fml = "46"
 pack_format = 15
@@ -357,3 +357,13 @@ deps.forge_loader = "38.0.17"
 deps.forge_fml = "38"
 pack_format = 8
 # TRAVERSAL-END 1.18-forge
+
+# TRAVERSAL-BEGIN 1.20.6-forge
+["1.20.6"]
+
+[forge."1.20.6"]
+mod.mc_compat = ">=1.20.6 <1.21"
+deps.forge_loader = "50.2.10"
+deps.forge_fml = "50"
+pack_format = 32
+# TRAVERSAL-END 1.20.6-forge

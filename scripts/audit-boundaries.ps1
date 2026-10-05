@@ -30,8 +30,16 @@ $loaders = @("fabric", "forge", "neoforge")
 # Versions where a loader has no usable build (threshold lands on a gap; the next
 # existing build becomes the boundary). Keep in sync with AGENTS section 6.
 $knownLoaderGaps = @{
-    forge    = @("1.21.2")
+    forge    = @("1.21.2", "1.20.5")
     neoforge = @("1.20.5")
+}
+
+# Build-script thresholds that change the SHIPPED jar (not just dev plumbing).
+# Source directives cannot express these, so they are special-cased here.
+$jarAffectingThresholds = @{
+    forge = @(
+        @{ Version = "1.20.6"; Why = "Forge reobf switch (SRG -> official runtime names)" }
+    )
 }
 
 # --- permanent nodes -----------------------------------------------------------
@@ -122,6 +130,26 @@ foreach ($loader in $loaders) {
             }
         }
     }
+
+    # jar-affecting build thresholds (e.g. the Forge reobf switch at 1.20.6)
+    if ($jarAffectingThresholds.ContainsKey($loader)) {
+        foreach ($jt in $jarAffectingThresholds[$loader]) {
+            $tVer = $jt.Version
+            if ((Compare-Version $tVer $newest) -gt 0) {
+                Write-Host ("  FUTURE  jar threshold {0} ({1}) - add a node when it ships" -f $tVer, $jt.Why)
+                continue
+            }
+            if ((Compare-Version $tVer $floor) -le 0) { continue }
+            for ($i = 0; $i -lt $nodes.Count - 1; $i++) {
+                if (((Compare-Version $nodes[$i] $tVer) -lt 0) -and ((Compare-Version $tVer $nodes[$i + 1]) -lt 0)) {
+                    Write-Host ("  MISSING boundary {0} between {1} and {2} (jar threshold: {3})" -f $tVer, $nodes[$i], $nodes[$i + 1], $jt.Why)
+                    $missing++
+                    $failures++
+                    break
+                }
+            }
+        }
+    }
     if ($missing -eq 0) { Write-Host "  missing boundaries: none" }
 
     # unjustified nodes
@@ -132,8 +160,13 @@ foreach ($loader in $loaders) {
         foreach ($t in $own) {
             if (((Compare-Version $prev $t.Version) -lt 0) -and ((Compare-Version $t.Version $node) -le 0)) { $justified = $t; break }
         }
+        if (-not $justified -and $jarAffectingThresholds.ContainsKey($loader)) {
+            foreach ($jt in $jarAffectingThresholds[$loader]) {
+                if (((Compare-Version $prev $jt.Version) -lt 0) -and ((Compare-Version $jt.Version $node) -le 0)) { $justified = $jt; break }
+            }
+        }
         if ($justified) {
-            Write-Host ("  justified {0,-8} <- {1} {2} ({3})" -f $node, $justified.Version, $(if ($justified.Version -ne $node) { "(first node at/after threshold)" } else { "" }), $justified.Location)
+            Write-Host ("  justified {0,-8} <- {1} {2} ({3})" -f $node, $justified.Version, $(if ($justified.Version -ne $node) { "(first node at/after threshold)" } else { "" }), $(if ($justified.PSObject.Properties["Location"]) { $justified.Location } else { $justified.Why }))
         } else {
             Write-Host ("  UNJUSTIFIED node {0}: no threshold in ({1}, {0}]" -f $node, $prev)
             $failures++

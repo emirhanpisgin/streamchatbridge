@@ -18,6 +18,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 *///?}
 
 //? if fabric {
+/**
+ * Test hook (1.17/1.18 only): when the system property {@code scb.devJoin} is set,
+ * joins that host once the title screen is up. Connecting before the initial model
+ * bake finishes (e.g. vanilla's {@code --server}) hangs or crashes the client, so
+ * both the dev harness and the production-jar smoke test use this instead.
+ */
 @Mixin(Minecraft.class)
 public class DevAutoJoinMixin {
 
@@ -26,7 +32,7 @@ public class DevAutoJoinMixin {
     private void streamchatbridge$autoJoin(CallbackInfo callbackInfo) {
         String target = System.getProperty("scb.devJoin");
 
-        if (target == null || System.getProperty("fabric.development") == null) {
+        if (target == null) {
             return;
         }
 

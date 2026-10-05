@@ -110,6 +110,9 @@ stonecutter {
         // TRAVERSAL-BEGIN 1.20-forge
         match("1.20", "forge")
         // TRAVERSAL-END 1.20-forge
+        // TRAVERSAL-BEGIN 1.20.6-forge
+        match("1.20.6", "forge")
+        // TRAVERSAL-END 1.20.6-forge
 
 
 
