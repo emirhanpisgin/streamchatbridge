@@ -58,5 +58,8 @@ repo. `plan.md` describes how the pending items are implemented.
 - [ ] **SCB-14…17 (P2)** — Kick chatroom lookup hardening, emote codes, richer chat
   lines, listing assets (changelog, screenshots, Kick setup guide).
 - [ ] **T-2/T-3/T-4 (CI)** — not planned per user decision.
-- [ ] **T-1 template part** — done as Batch 5 in `../mc-multiloader-template`
-  (helps ItemFrames+; see `../itemframesplus/TODO-REVIEW.md`).
+- [x] **T-1 template part** — done: `mc-multiloader-template` now applies the
+  renamer for `<1.20.6`, wires mixin refmaps when a mixins config exists, and its
+  Forge `requiredJava` maps 1.17 to Java 17. (Changes left uncommitted in the
+  template repo for you to review; ItemFrames+ stays untouched - see
+  `../itemframesplus/TODO-REVIEW.md`.)
