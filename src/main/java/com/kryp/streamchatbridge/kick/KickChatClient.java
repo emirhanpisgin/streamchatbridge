@@ -5,6 +5,9 @@ import com.kryp.streamchatbridge.StreamChatBridge;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kryp.streamchatbridge.chat.PlatformChatMessage;
+import com.kryp.streamchatbridge.config.ConfigManager;
+import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.util.Threads;
 
 import java.io.IOException;
@@ -15,8 +18,8 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.concurrent.CompletionStage;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 public final class KickChatClient {
 
@@ -30,13 +33,16 @@ public final class KickChatClient {
 
     private static final String CHAT_EVENT = "App\\Events\\ChatMessageEvent";
 
+    /** Kick sends emotes as {@code [emote:ID:NAME]}; only the name is shown. */
+    private static final Pattern EMOTE_PATTERN = Pattern.compile("\\[emote:\\d+:([^\\]]+)\\]");
+
     private static final long[] RECONNECT_DELAYS_MS = {1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 30_000L};
 
     private static final Gson GSON = new Gson();
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    private final BiConsumer<String, String> messageHandler;
+    private final Consumer<PlatformChatMessage> messageHandler;
 
     private volatile WebSocket webSocket;
 
@@ -60,7 +66,7 @@ public final class KickChatClient {
 
     private volatile long connectionGeneration = 0;
 
-    public KickChatClient(BiConsumer<String, String> messageHandler) {
+    public KickChatClient(Consumer<PlatformChatMessage> messageHandler) {
         this.messageHandler = messageHandler;
     }
 
@@ -104,7 +110,7 @@ public final class KickChatClient {
 
         setConnectionState(ConnectionState.CONNECTING);
 
-        String resolvedChatroomId = findChatroomId(username);
+        String resolvedChatroomId = resolveChatroomId(username);
 
         if (generation != connectionGeneration || shuttingDown || !shouldStayConnected) {
 
@@ -401,6 +407,74 @@ public final class KickChatClient {
      * Chatroom lookup
      */
 
+    /**
+     * Uses the manual override, then a cached id for the same channel, then the
+     * unofficial lookup with retries. Successful lookups are cached in the config.
+     */
+    private String resolveChatroomId(String username) {
+        ModConfig config = ConfigManager.get();
+
+        String override = config.kickChatroomIdOverride;
+
+        if (override != null && !override.isBlank()) {
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Using configured Kick chatroom ID override.");
+
+            return override.trim();
+        }
+
+        String normalized = normalizeUsername(username);
+
+        if (normalized == null) {
+            return null;
+        }
+
+        String cached = config.kickChatroomId;
+
+        if (cached != null && !cached.isBlank() && normalized.equalsIgnoreCase(config.kickChatroomChannel)) {
+            return cached;
+        }
+
+        String id = findChatroomIdWithRetry(normalized);
+
+        if (id != null) {
+            config.kickChatroomId = id;
+
+            config.kickChatroomChannel = normalized;
+
+            ConfigManager.save();
+        }
+
+        return id;
+    }
+
+    private String findChatroomIdWithRetry(String normalized) {
+        long[] delays = {1_000L, 2_000L, 4_000L};
+
+        for (int attempt = 0; attempt < delays.length; attempt++) {
+            String id = findChatroomId(normalized);
+
+            if (id != null) {
+                return id;
+            }
+
+            if (attempt < delays.length - 1) {
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Retrying Kick chatroom lookup (" + (attempt + 2) + "/" + delays.length + ")...");
+
+                try {
+                    Thread.sleep(delays[attempt]);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+
+                    return null;
+                }
+            }
+        }
+
+        StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick chatroom lookup failed after " + delays.length + " attempts. Set kickChatroomIdOverride in the config if it stays blocked.");
+
+        return null;
+    }
+
     private String findChatroomId(String username) {
         try {
             String normalized = normalizeUsername(username);
@@ -488,6 +562,8 @@ public final class KickChatClient {
                 return;
             }
 
+            message = EMOTE_PATTERN.matcher(message).replaceAll("$1");
+
             if (!data.has("sender") || !data.get("sender").isJsonObject()) {
 
                 return;
@@ -502,13 +578,52 @@ public final class KickChatClient {
                 return;
             }
 
+            int color = PlatformChatMessage.NO_COLOR;
+
+            String badges = "";
+
+            if (sender.has("identity") && sender.get("identity").isJsonObject()) {
+
+                JsonObject identity = sender.getAsJsonObject("identity");
+
+                color = PlatformChatMessage.parseColor(readString(identity, "color"));
+
+                badges = readBadges(identity);
+            }
+
             if (messageHandler != null) {
-                messageHandler.accept(username, message);
+                messageHandler.accept(new PlatformChatMessage(username, message, color, badges));
             }
 
         } catch (Exception e) {
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not process Kick chat message: " + e.getMessage());
         }
+    }
+
+    private static String readBadges(JsonObject identity) {
+        if (!identity.has("badges") || !identity.get("badges").isJsonArray()) {
+            return "";
+        }
+
+        StringBuilder badges = new StringBuilder();
+
+        for (JsonElement element : identity.getAsJsonArray("badges")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+
+            String tag = PlatformChatMessage.badgeTag(readString(element.getAsJsonObject(), "type"));
+
+            if (!tag.isEmpty()) {
+                if (badges.length() > 0) {
+                    badges.append(' ');
+                }
+
+                badges.append(tag);
+            }
+        }
+
+        return badges.toString();
     }
 
     private static String readString(JsonObject object, String key) {

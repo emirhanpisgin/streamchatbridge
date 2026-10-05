@@ -55,8 +55,19 @@ repo. `plan.md` describes how the pending items are implemented.
 
 ## Parked
 
-- [ ] **SCB-14…17 (P2)** — Kick chatroom lookup hardening, emote codes, richer chat
-  lines, listing assets (changelog, screenshots, Kick setup guide).
+- [x] **SCB-14 · Kick chatroom lookup hardened** — cached per channel in the
+  config, 3 retries with backoff, `kickChatroomIdOverride` for manual entry, and
+  the failure log points at the override; callers already show the in-game error.
+- [x] **SCB-15 · Kick emote codes cleaned** — `[emote:ID:NAME]` renders as `NAME`.
+- [x] **SCB-16 · Richer chat lines** — Twitch/Kick user colors, badges
+  (broadcaster/mod/vip/sub/founder), ignore list, mention highlight + sound
+  (config toggles: `showUserColors`, `showBadges`, `highlightMentions`,
+  `mentionSound`, `ignoredUsers`). Compile-verified 1.17.1–26.3 across all three
+  loaders; live echo re-verified. Visual styling not yet screenshot-verified.
+- [x] **SCB-17 · Listing kit** — `docs/listing.md` (description, changelog
+  template, Kick app setup, "what is stored where") plus dashboard screenshots in
+  `docs/screenshots/`; still to record before publishing: a chat GIF and a
+  before/after dashboard GIF.
 - [ ] **T-2/T-3/T-4 (CI)** — not planned per user decision.
 - [x] **T-1 template part** — done: `mc-multiloader-template` now applies the
   renamer for `<1.20.6`, wires mixin refmaps when a mixins config exists, and its

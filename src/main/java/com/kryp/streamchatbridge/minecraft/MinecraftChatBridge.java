@@ -1,6 +1,7 @@
 package com.kryp.streamchatbridge.minecraft;
 
 import com.kryp.streamchatbridge.StreamChatBridgeClient;
+import com.kryp.streamchatbridge.chat.PlatformChatMessage;
 import com.kryp.streamchatbridge.config.ConfigManager;
 import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.kick.KickClient;
@@ -9,8 +10,13 @@ import com.kryp.streamchatbridge.util.ScbText;
 import com.kryp.streamchatbridge.util.Threads;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.sounds.SoundEvents;
+
+import java.util.Locale;
 
 public final class MinecraftChatBridge {
 
@@ -123,7 +129,7 @@ public final class MinecraftChatBridge {
      * Incoming Twitch
      */
 
-    public static void showTwitchMessage(String username, String message) {
+    public static void showTwitchMessage(PlatformChatMessage chat) {
         ModConfig config = ConfigManager.get();
 
         String format = config.twitchIncomingMessageFormat;
@@ -140,14 +146,14 @@ public final class MinecraftChatBridge {
             platform = "Twitch";
         }
 
-        showLocalMessage(buildIncomingComponent(format, platform, username, message));
+        showIncoming(chat, format, platform);
     }
 
     /*
      * Incoming Kick
      */
 
-    public static void showKickMessage(String username, String message) {
+    public static void showKickMessage(PlatformChatMessage chat) {
         ModConfig config = ConfigManager.get();
 
         String format = config.kickIncomingMessageFormat;
@@ -164,7 +170,66 @@ public final class MinecraftChatBridge {
             platform = "Kick";
         }
 
-        showLocalMessage(buildIncomingComponent(format, platform, username, message));
+        showIncoming(chat, format, platform);
+    }
+
+    private static void showIncoming(PlatformChatMessage chat, String format, String platform) {
+        ModConfig config = ConfigManager.get();
+
+        if (isIgnored(config, chat.getUsername())) {
+            return;
+        }
+
+        boolean mentioned = isMentioned(chat.getMessage());
+
+        showLocalMessage(buildIncomingComponent(format, platform, chat, mentioned));
+
+        if (mentioned && config.mentionSound) {
+            playMentionSound();
+        }
+    }
+
+    private static boolean isIgnored(ModConfig config, String username) {
+        if (config.ignoredUsers == null || config.ignoredUsers.isEmpty() || username == null || username.isBlank()) {
+
+            return false;
+        }
+
+        for (String ignored : config.ignoredUsers) {
+            if (ignored != null && ignored.trim().equalsIgnoreCase(username.trim())) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isMentioned(String message) {
+        if (message == null || message.isBlank()) {
+
+            return false;
+        }
+
+        Minecraft client = Minecraft.getInstance();
+
+        if (client.getUser() == null) {
+
+            return false;
+        }
+
+        String player = client.getUser().getName();
+
+        return player != null && !player.isBlank() && message.toLowerCase(Locale.ROOT).contains(player.toLowerCase(Locale.ROOT));
+    }
+
+    private static void playMentionSound() {
+        try {
+            Minecraft client = Minecraft.getInstance();
+
+            client.execute(() -> client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.0F)));
+        } catch (Exception ignored) {
+        }
     }
 
     /*
@@ -172,6 +237,10 @@ public final class MinecraftChatBridge {
      */
 
     public static MutableComponent buildIncomingComponent(String format, String platform, String username, String message) {
+        return buildIncomingComponent(format, platform, new PlatformChatMessage(username, message, PlatformChatMessage.NO_COLOR, ""), false);
+    }
+
+    public static MutableComponent buildIncomingComponent(String format, String platform, PlatformChatMessage chat, boolean mentioned) {
         if (format == null || format.isBlank()) {
 
             format = DEFAULT_FORMAT;
@@ -180,14 +249,6 @@ public final class MinecraftChatBridge {
         if (platform == null || platform.isBlank()) {
 
             platform = "Twitch";
-        }
-
-        if (username == null) {
-            username = "";
-        }
-
-        if (message == null) {
-            message = "";
         }
 
         MutableComponent result = ScbText.empty();
@@ -210,7 +271,7 @@ public final class MinecraftChatBridge {
 
                     if (parsedColor != null || reset) {
 
-                        appendFormattedText(result, format.substring(textStart, position), currentColor, platform, username, message);
+                        appendFormattedText(result, format.substring(textStart, position), currentColor, platform, chat, mentioned);
 
                         currentColor = reset ? null : parsedColor;
 
@@ -226,12 +287,14 @@ public final class MinecraftChatBridge {
             position++;
         }
 
-        appendFormattedText(result, format.substring(textStart), currentColor, platform, username, message);
+        appendFormattedText(result, format.substring(textStart), currentColor, platform, chat, mentioned);
 
         return result;
     }
 
-    private static void appendFormattedText(MutableComponent result, String text, ChatFormatting color, String platform, String username, String message) {
+    private static void appendFormattedText(MutableComponent result, String text, ChatFormatting color, String platform, PlatformChatMessage chat, boolean mentioned) {
+        ModConfig config = ConfigManager.get();
+
         int position = 0;
 
         while (position < text.length()) {
@@ -259,15 +322,46 @@ public final class MinecraftChatBridge {
                 position = nextIndex + "{platform}".length();
 
             } else if (nextIndex == usernameIndex) {
-                appendPart(result, username, color);
+                if (config.showBadges) {
+                    appendBadges(result, chat.getBadges());
+                }
+
+                if (config.showUserColors && chat.getColor() != PlatformChatMessage.NO_COLOR) {
+                    appendPart(result, chat.getUsername(), chat.getColor());
+                } else {
+                    appendPart(result, chat.getUsername(), color);
+                }
 
                 position = nextIndex + "{username}".length();
 
             } else {
-                appendPart(result, message, color);
+                ChatFormatting messageColor = mentioned && config.highlightMentions ? ChatFormatting.GOLD : color;
+
+                appendPart(result, chat.getMessage(), messageColor);
 
                 position = nextIndex + "{message}".length();
             }
+        }
+    }
+
+    private static void appendBadges(MutableComponent result, String badges) {
+        if (badges == null || badges.isBlank()) {
+
+            return;
+        }
+
+        for (String badge : badges.split(" ")) {
+            ChatFormatting badgeColor = switch (badge) {
+                case "broadcaster" -> ChatFormatting.RED;
+
+                case "mod" -> ChatFormatting.GREEN;
+
+                case "vip" -> ChatFormatting.LIGHT_PURPLE;
+
+                default -> ChatFormatting.GOLD;
+            };
+
+            appendPart(result, "[" + badge + "] ", badgeColor);
         }
     }
 
@@ -281,6 +375,18 @@ public final class MinecraftChatBridge {
         if (color != null) {
             component.withStyle(color);
         }
+
+        result.append(component);
+    }
+
+    private static void appendPart(MutableComponent result, String text, int rgbColor) {
+        if (text.isEmpty()) {
+            return;
+        }
+
+        MutableComponent component = ScbText.literal(sanitize(text));
+
+        component.withStyle(style -> style.withColor(TextColor.fromRgb(rgbColor)));
 
         result.append(component);
     }

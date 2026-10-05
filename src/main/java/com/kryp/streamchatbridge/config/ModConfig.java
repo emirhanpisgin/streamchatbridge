@@ -1,5 +1,8 @@
 package com.kryp.streamchatbridge.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ModConfig {
 
     /*
@@ -30,6 +33,30 @@ public class ModConfig {
     public String kickIncomingPlatformLabel = "Kick";
 
     public String kickIncomingMessageFormat = "<green>[{platform}]<reset> <green>{username}<reset>: <white>{message}";
+
+    /** Cached chatroom id for {@link #kickChatroomChannel} (avoids the lookup call). */
+    public String kickChatroomId = "";
+
+    public String kickChatroomChannel = "";
+
+    /** Manual chatroom id override; used verbatim when set. */
+    public String kickChatroomIdOverride = "";
+
+
+    /*
+     * Chat appearance
+     */
+
+    public boolean showUserColors = true;
+
+    public boolean showBadges = true;
+
+    public boolean highlightMentions = true;
+
+    public boolean mentionSound = true;
+
+    /** Usernames (case-insensitive) whose messages are not shown. */
+    public List<String> ignoredUsers = new ArrayList<>();
 
 
     /*

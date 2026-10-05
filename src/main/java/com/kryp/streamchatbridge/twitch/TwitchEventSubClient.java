@@ -3,7 +3,9 @@ package com.kryp.streamchatbridge.twitch;
 import com.kryp.streamchatbridge.StreamChatBridge;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kryp.streamchatbridge.chat.PlatformChatMessage;
 import com.kryp.streamchatbridge.util.Threads;
 
 import java.net.URI;
@@ -13,7 +15,6 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.concurrent.CompletionStage;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public final class TwitchEventSubClient {
@@ -32,7 +33,7 @@ public final class TwitchEventSubClient {
 
     private final TwitchAuth auth;
 
-    private final BiConsumer<String, String> messageHandler;
+    private final Consumer<PlatformChatMessage> messageHandler;
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -58,7 +59,7 @@ public final class TwitchEventSubClient {
 
     private volatile long lastMessageAt = 0L;
 
-    public TwitchEventSubClient(TwitchAuth auth, BiConsumer<String, String> messageHandler) {
+    public TwitchEventSubClient(TwitchAuth auth, Consumer<PlatformChatMessage> messageHandler) {
         this.auth = auth;
         this.messageHandler = messageHandler;
     }
@@ -574,9 +575,47 @@ public final class TwitchEventSubClient {
 
         String message = messageObject.get("text").getAsString();
 
+        int color = PlatformChatMessage.parseColor(readString(event, "color"));
+
+        String badges = readBadges(event);
+
         if (messageHandler != null) {
-            messageHandler.accept(username, message);
+            messageHandler.accept(new PlatformChatMessage(username, message, color, badges));
         }
+    }
+
+    private static String readBadges(JsonObject event) {
+        if (!event.has("badges") || !event.get("badges").isJsonArray()) {
+            return "";
+        }
+
+        StringBuilder badges = new StringBuilder();
+
+        for (JsonElement element : event.getAsJsonArray("badges")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+
+            String tag = PlatformChatMessage.badgeTag(readString(element.getAsJsonObject(), "set_id"));
+
+            if (!tag.isEmpty()) {
+                if (badges.length() > 0) {
+                    badges.append(' ');
+                }
+
+                badges.append(tag);
+            }
+        }
+
+        return badges.toString();
+    }
+
+    private static String readString(JsonObject object, String key) {
+        if (!object.has(key) || object.get(key).isJsonNull()) {
+            return null;
+        }
+
+        return object.get(key).getAsString();
     }
 
     private final class EventSubSocketListener implements WebSocket.Listener {
