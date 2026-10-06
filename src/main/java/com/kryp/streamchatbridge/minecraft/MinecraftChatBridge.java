@@ -323,7 +323,7 @@ public final class MinecraftChatBridge {
 
             } else if (nextIndex == usernameIndex) {
                 if (config.showBadges) {
-                    appendBadges(result, chat.getBadges());
+                    appendBadges(result, chat.getBadges(), config.staffBadgesOnly);
                 }
 
                 if (config.showUserColors && chat.getColor() != PlatformChatMessage.NO_COLOR) {
@@ -344,13 +344,18 @@ public final class MinecraftChatBridge {
         }
     }
 
-    private static void appendBadges(MutableComponent result, String badges) {
+    private static void appendBadges(MutableComponent result, String badges, boolean staffOnly) {
         if (badges == null || badges.isBlank()) {
 
             return;
         }
 
         for (String badge : badges.split(" ")) {
+            if (staffOnly && (badge.equals("sub") || badge.equals("founder"))) {
+
+                continue;
+            }
+
             ChatFormatting badgeColor = switch (badge) {
                 case "broadcaster" -> ChatFormatting.RED;
 

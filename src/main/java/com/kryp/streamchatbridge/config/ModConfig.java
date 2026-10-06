@@ -51,9 +51,15 @@ public class ModConfig {
 
     public boolean showBadges = true;
 
+    /** When true, only broadcaster/mod/VIP badges are shown (sub/founder hidden). */
+    public boolean staffBadgesOnly = true;
+
     public boolean highlightMentions = true;
 
     public boolean mentionSound = true;
+
+    /** When to print platform status on world join: {@code always}, {@code errors} or {@code never}. */
+    public String joinStatusMode = "errors";
 
     /** Usernames (case-insensitive) whose messages are not shown. */
     public List<String> ignoredUsers = new ArrayList<>();

@@ -157,11 +157,23 @@ public class StreamChatBridgeClient {
      */
 
     private static void showJoinStatus() {
-        showTwitchJoinStatus();
-        showKickJoinStatus();
+        String mode = ConfigManager.get().joinStatusMode;
+
+        if (mode == null) {
+            mode = "errors";
+        }
+
+        if ("never".equalsIgnoreCase(mode)) {
+            return;
+        }
+
+        boolean always = "always".equalsIgnoreCase(mode);
+
+        showTwitchJoinStatus(always);
+        showKickJoinStatus(always);
     }
 
-    private static void showTwitchJoinStatus() {
+    private static void showTwitchJoinStatus(boolean always) {
         if (!TWITCH_AUTH.isAuthenticated()) {
             MinecraftChatBridge.showLocalMessage(MinecraftChatBridge.systemMessage().append(MinecraftChatBridge.twitch()).append(MinecraftChatBridge.separator(": ")).append(MinecraftChatBridge.warning("Not logged in")));
 
@@ -169,6 +181,10 @@ public class StreamChatBridgeClient {
         }
 
         TwitchEventSubClient.ConnectionState state = TWITCH_EVENT_SUB.getConnectionState();
+
+        if (!always && state != TwitchEventSubClient.ConnectionState.DISCONNECTED) {
+            return;
+        }
 
         MutableComponent message = MinecraftChatBridge.systemMessage().append(MinecraftChatBridge.twitch()).append(MinecraftChatBridge.separator(": "));
 
@@ -193,7 +209,7 @@ public class StreamChatBridgeClient {
         MinecraftChatBridge.showLocalMessage(message);
     }
 
-    private static void showKickJoinStatus() {
+    private static void showKickJoinStatus(boolean always) {
         if (!KICK_AUTH.hasClientCredentials()) {
             MinecraftChatBridge.showLocalMessage(MinecraftChatBridge.systemMessage().append(MinecraftChatBridge.kick()).append(MinecraftChatBridge.separator(": ")).append(MinecraftChatBridge.warning("Setup required")).append(MinecraftChatBridge.separator(" — ")).append(MinecraftChatBridge.label("Press F8 to configure")));
 
@@ -207,6 +223,10 @@ public class StreamChatBridgeClient {
         }
 
         KickChatClient.ConnectionState state = KICK_CHAT.getConnectionState();
+
+        if (!always && state != KickChatClient.ConnectionState.DISCONNECTED) {
+            return;
+        }
 
         MutableComponent message = MinecraftChatBridge.systemMessage().append(MinecraftChatBridge.kick()).append(MinecraftChatBridge.separator(": "));
 

@@ -22,10 +22,11 @@ Supported loaders and versions
 The mod is client-side only. It works on any server; the server does not need it.
 
 Extras
-- Twitch user colors, badges (broadcaster/mod/VIP/sub/founder), emote-name
-  cleanup for Kick, mention highlight + sound, and an ignore list.
-- Secrets (tokens, Kick client secret) are stored per user outside `config/`
-  (see "What is stored where").
+- Configurable chat: user colors, badges (staff-only by default; sub/founder can be
+  enabled), mention highlight + sound, ignore list, per-platform message formats,
+  and join-status lines (`joinStatusMode`: `always`, `errors` (default) or `never`).
+- Kick emote codes are cleaned up; Twitch/Kick tokens are refreshed automatically
+  and secrets live outside `config/` (see "What is stored where").
 ```
 
 ## Changelog (template)

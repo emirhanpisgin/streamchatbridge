@@ -71,6 +71,9 @@ repo. `plan.md` describes how the pending items are implemented.
   badge (`[Kick] [broadcaster] kryparnold: ...`), mention path exercised with
   "Dev"; ignore list verified live (send succeeded, echo suppressed for both
   platforms, case-insensitive); Twitch echo PASS with the new pipeline.
+  Quiet defaults added after feedback: `staffBadgesOnly = true` (sub/founder
+  hidden) and `joinStatusMode = "errors"` (no per-join "Connected" lines); both
+  are configurable, as are colors/mentions/sound/ignore list.
 - [x] **SCB-17 · Listing kit** — `docs/listing.md` (description, changelog
   template, Kick app setup, "what is stored where") plus dashboard screenshots in
   `docs/screenshots/`; still to record before publishing: a chat GIF and a
