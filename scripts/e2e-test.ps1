@@ -26,6 +26,8 @@ param(
     [string]$World = "TestWorld",
     [string]$Prefix = "",
     [string]$ProbeText = "",
+    [string]$ExtraChat = "",
+    [string]$ExtraEcho = "",
     [string]$BuildJdk = "",
     [int]$JoinTimeoutSec = 300,
     [int]$EchoTimeoutSec = 45,
@@ -208,6 +210,28 @@ if ($joined) {
         Send-ChatLine -Handle $game.MainWindowHandle -Text "/scb status" -Command
         Write-Report "sent: /scb status"
 
+        $extraOk = $true
+        if ($ExtraChat) {
+            Send-ChatLine -Handle $game.MainWindowHandle -Text $ExtraChat
+            Write-Report "sent extra: $ExtraChat"
+
+            $extraPattern = $ExtraEcho
+            if ($extraPattern) {
+                $extraOk = $false
+                $extraDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
+                while (-not $extraOk -and (Get-Date) -lt $extraDeadline) {
+                    Start-Sleep -Seconds 3
+                    if (Select-String -Path $LogPath -Pattern $extraPattern -Quiet -ErrorAction SilentlyContinue) { $extraOk = $true }
+                }
+
+                $extraLine = (Select-String -Path $LogPath -Pattern $extraPattern -ErrorAction SilentlyContinue | Select-Object -Last 1)
+                $extraClean = $extraLine -and ($extraLine.Line -notmatch '\[emote:')
+                Write-Report "extra-echo: $extraOk clean: $extraClean"
+                if ($extraLine) { Write-Report ("  " + $extraLine.Line) }
+                $extraOk = $extraOk -and $extraClean
+            }
+        }
+
         $echoDeadline = (Get-Date).AddSeconds($EchoTimeoutSec)
         $echo = $false
         while ((Get-Date) -lt $echoDeadline) {
@@ -218,12 +242,12 @@ if ($joined) {
         $serverEcho = [bool](Select-String -Path $LogPath -Pattern "> $([regex]::Escape($Prefix))$Probe" -Quiet -ErrorAction SilentlyContinue)
         $status = [bool](Select-String -Path $LogPath -Pattern "Minecraft . Twitch: ON|Minecraft → Twitch: ON" -Quiet -ErrorAction SilentlyContinue)
 
-        Write-Report "checks: intercepted=$( -not $serverEcho ) platform-echo=$echo scb-status=$status"
-        if ((-not $serverEcho) -and $echo -and $status) {
+        Write-Report "checks: intercepted=$( -not $serverEcho ) platform-echo=$echo scb-status=$status extra-echo=$extraOk"
+        if ((-not $serverEcho) -and $echo -and $status -and $extraOk) {
             Write-Report "RESULT PASS"
         } else {
             Write-Report "RESULT FAIL"
-            Select-String -Path $LogPath -Pattern "$Probe|Twitch|Stream Chat Bridge" -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { Write-Report ("  " + $_.Line) }
+            Select-String -Path $LogPath -Pattern "$Probe|Twitch|Kick|Stream Chat Bridge" -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { Write-Report ("  " + $_.Line) }
         }
     }
 } else {

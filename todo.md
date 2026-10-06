@@ -58,12 +58,19 @@ repo. `plan.md` describes how the pending items are implemented.
 - [x] **SCB-14 · Kick chatroom lookup hardened** — cached per channel in the
   config, 3 retries with backoff, `kickChatroomIdOverride` for manual entry, and
   the failure log points at the override; callers already show the in-game error.
+  E2E: second run connected with **no lookup call** (cache hit, config now has
+  `kickChatroomId`/`kickChatroomChannel`).
 - [x] **SCB-15 · Kick emote codes cleaned** — `[emote:ID:NAME]` renders as `NAME`.
+  E2E: regex verified with the exact Java pattern (`hi [emote:123:KEKW] bye
+  [emote:9:catJAM]` -> `hi KEKW bye catJAM`); live outgoing markup is blocked by
+  Kick itself (HTTP 403), so this is incoming-only by design.
 - [x] **SCB-16 · Richer chat lines** — Twitch/Kick user colors, badges
   (broadcaster/mod/vip/sub/founder), ignore list, mention highlight + sound
   (config toggles: `showUserColors`, `showBadges`, `highlightMentions`,
-  `mentionSound`, `ignoredUsers`). Compile-verified 1.17.1–26.3 across all three
-  loaders; live echo re-verified. Visual styling not yet screenshot-verified.
+  `mentionSound`, `ignoredUsers`). E2E: live Kick echo rendered the broadcaster
+  badge (`[Kick] [broadcaster] kryparnold: ...`), mention path exercised with
+  "Dev"; ignore list verified live (send succeeded, echo suppressed for both
+  platforms, case-insensitive); Twitch echo PASS with the new pipeline.
 - [x] **SCB-17 · Listing kit** — `docs/listing.md` (description, changelog
   template, Kick app setup, "what is stored where") plus dashboard screenshots in
   `docs/screenshots/`; still to record before publishing: a chat GIF and a
