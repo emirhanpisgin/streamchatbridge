@@ -33,6 +33,14 @@ param(
     [switch]$LeaveOpen,
     [switch]$SkipEcho,
 
+    # Chat-only screenshot: press F2 without opening the dashboard first, so the
+    # chat (badges, colors) is captured unblurred.
+    [switch]$ChatShot,
+
+    # Extra chat line to send after the standard probe (e.g. "k!probe" for a
+    # real Kick echo in the screenshot).
+    [string]$ExtraCmd = "",
+
     # Production-jar mode: run a prebuilt .cmd instead of a Gradle dev client,
     # with the game directory and report/screenshot names given explicitly.
     [string]$ClientCmdFile = "",
@@ -400,6 +408,12 @@ if ($joined) {
         Send-ChatLine -Handle $hwnd -Text "/scb status"
         Write-Report "sent: /scb status"
 
+        if ($ExtraCmd) {
+            Send-ChatLine -Handle $hwnd -Text $ExtraCmd
+            Write-Report "sent extra: $ExtraCmd"
+            Start-Sleep -Seconds 5
+        }
+
         $echo = $false
         if ($SkipEcho) {
             Write-Report "echo: skipped (Twitch session not required)"
@@ -436,8 +450,10 @@ if ($joined) {
         if (-not $NoScreen) {
             $shotBefore = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
             $lastBefore = if ($shotBefore) { $shotBefore[0].LastWriteTime } else { [datetime]::MinValue }
-            Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x77 -SendKeysKey "{F8}"   # F8 opens the dashboard
-            Start-Sleep -Seconds 3
+            if (-not $ChatShot) {
+                Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x77 -SendKeysKey "{F8}"   # F8 opens the dashboard
+                Start-Sleep -Seconds 3
+            }
             Send-KeyWithFakeFocus -Handle $hwnd -Vk 0x71 -SendKeysKey "{F2}"   # F2 screenshots
             Start-Sleep -Seconds 2
             $shots = @(Get-ChildItem (Join-Path $RunDir "screenshots") -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)

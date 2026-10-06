@@ -35,14 +35,29 @@ public final class MinecraftChatBridge {
      */
     public static final String DEFAULT_FORMAT = TWITCH_DEFAULT_FORMAT;
 
-    /** Bitmap-font style for badge icons (see the font resource). */
-    private static final Style BADGE_FONT_STYLE = createBadgeFontStyle();
+    /*
+     * Badge icon colors. The glyphs are white/gray bitmap art (see the font
+     * resource) so the style color tints them; the mod sword follows the
+     * platform the message came from.
+     */
+    private static final int STREAMER_COLOR = 0xFF3B30;
 
-    private static Style createBadgeFontStyle() {
+    private static final int MOD_TWITCH_COLOR = 0x9146FF;
+
+    private static final int MOD_KICK_COLOR = 0x53FC18;
+
+    private static final int VIP_COLOR = 0xFF4FD8;
+
+    private static final int SUB_COLOR = 0xFFD700;
+
+    private static final int FOUNDER_COLOR = 0x22E6FF;
+
+    /** Bitmap-font style for badge icons, tinted with the given color. */
+    private static Style badgeStyle(int rgb) {
         //? if >=1.21.9 {
-        return Style.EMPTY.withFont(new FontDescription.Resource(StreamChatBridge.id("badges")));
+        return Style.EMPTY.withFont(new FontDescription.Resource(StreamChatBridge.id("badges"))).withColor(TextColor.fromRgb(rgb));
         //?} else {
-        /*return Style.EMPTY.withFont(StreamChatBridge.id("badges"));
+        /*return Style.EMPTY.withFont(StreamChatBridge.id("badges")).withColor(TextColor.fromRgb(rgb));
         *///?}
     }
 
@@ -162,7 +177,7 @@ public final class MinecraftChatBridge {
             platform = "Twitch";
         }
 
-        showIncoming(chat, format, platform);
+        showIncoming(chat, format, platform, false);
     }
 
     /*
@@ -186,10 +201,10 @@ public final class MinecraftChatBridge {
             platform = "Kick";
         }
 
-        showIncoming(chat, format, platform);
+        showIncoming(chat, format, platform, true);
     }
 
-    private static void showIncoming(PlatformChatMessage chat, String format, String platform) {
+    private static void showIncoming(PlatformChatMessage chat, String format, String platform, boolean kick) {
         ModConfig config = ConfigManager.get();
 
         if (isIgnored(config, chat.getUsername())) {
@@ -198,7 +213,7 @@ public final class MinecraftChatBridge {
 
         boolean mentioned = isMentioned(chat.getMessage());
 
-        showLocalMessage(buildIncomingComponent(format, platform, chat, mentioned));
+        showLocalMessage(buildIncomingComponent(format, platform, kick, chat, mentioned));
 
         if (mentioned && config.mentionSound) {
             playMentionSound();
@@ -252,11 +267,11 @@ public final class MinecraftChatBridge {
      * Incoming message formatter
      */
 
-    public static MutableComponent buildIncomingComponent(String format, String platform, String username, String message) {
-        return buildIncomingComponent(format, platform, new PlatformChatMessage(username, message, PlatformChatMessage.NO_COLOR, ""), false);
+    public static MutableComponent buildIncomingComponent(String format, String platform, boolean kick, String username, String message) {
+        return buildIncomingComponent(format, platform, kick, new PlatformChatMessage(username, message, PlatformChatMessage.NO_COLOR, ""), false);
     }
 
-    public static MutableComponent buildIncomingComponent(String format, String platform, PlatformChatMessage chat, boolean mentioned) {
+    public static MutableComponent buildIncomingComponent(String format, String platform, boolean kick, PlatformChatMessage chat, boolean mentioned) {
         if (format == null || format.isBlank()) {
 
             format = DEFAULT_FORMAT;
@@ -287,7 +302,7 @@ public final class MinecraftChatBridge {
 
                     if (parsedColor != null || reset) {
 
-                        appendFormattedText(result, format.substring(textStart, position), currentColor, platform, chat, mentioned);
+                        appendFormattedText(result, format.substring(textStart, position), currentColor, platform, chat, mentioned, kick);
 
                         currentColor = reset ? null : parsedColor;
 
@@ -303,12 +318,12 @@ public final class MinecraftChatBridge {
             position++;
         }
 
-        appendFormattedText(result, format.substring(textStart), currentColor, platform, chat, mentioned);
+        appendFormattedText(result, format.substring(textStart), currentColor, platform, chat, mentioned, kick);
 
         return result;
     }
 
-    private static void appendFormattedText(MutableComponent result, String text, ChatFormatting color, String platform, PlatformChatMessage chat, boolean mentioned) {
+    private static void appendFormattedText(MutableComponent result, String text, ChatFormatting color, String platform, PlatformChatMessage chat, boolean mentioned, boolean kick) {
         ModConfig config = ConfigManager.get();
 
         int position = 0;
@@ -339,7 +354,7 @@ public final class MinecraftChatBridge {
 
             } else if (nextIndex == usernameIndex) {
                 if (config.showBadges) {
-                    appendBadges(result, chat.getBadges(), config.staffBadgesOnly);
+                    appendBadges(result, chat.getBadges(), config.staffBadgesOnly, kick);
                 }
 
                 if (config.showUserColors && chat.getColor() != PlatformChatMessage.NO_COLOR) {
@@ -360,7 +375,7 @@ public final class MinecraftChatBridge {
         }
     }
 
-    private static void appendBadges(MutableComponent result, String badges, boolean staffOnly) {
+    private static void appendBadges(MutableComponent result, String badges, boolean staffOnly, boolean kick) {
         if (badges == null || badges.isBlank()) {
 
             return;
@@ -374,15 +389,33 @@ public final class MinecraftChatBridge {
 
             char glyph = badgeGlyph(badge);
 
-            if (glyph == 0) {
+            int color = badgeColor(badge, kick);
+
+            if (glyph == 0 || color < 0) {
 
                 continue;
             }
 
-            appendPart(result, String.valueOf(glyph), BADGE_FONT_STYLE);
+            appendPart(result, String.valueOf(glyph), badgeStyle(color));
 
             appendPart(result, " ", (ChatFormatting) null);
         }
+    }
+
+    private static int badgeColor(String badge, boolean kick) {
+        return switch (badge) {
+            case "broadcaster" -> STREAMER_COLOR;
+
+            case "mod" -> kick ? MOD_KICK_COLOR : MOD_TWITCH_COLOR;
+
+            case "vip" -> VIP_COLOR;
+
+            case "sub" -> SUB_COLOR;
+
+            case "founder" -> FOUNDER_COLOR;
+
+            default -> -1;
+        };
     }
 
     /** Badge icons are a bitmap font; see {@code assets/streamchatbridge/font/badges.json}. */

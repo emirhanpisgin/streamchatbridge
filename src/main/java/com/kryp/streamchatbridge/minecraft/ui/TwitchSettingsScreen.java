@@ -273,7 +273,7 @@ public final class TwitchSettingsScreen extends ScbScreen {
 
         String platform = platformField == null ? "Twitch" : platformField.getValue();
 
-        return MinecraftChatBridge.buildIncomingComponent(format, platform, "ExampleUser", "Hello!");
+        return MinecraftChatBridge.buildIncomingComponent(format, platform, false, "ExampleUser", "Hello!");
     }
 
     private void release(Button button) {

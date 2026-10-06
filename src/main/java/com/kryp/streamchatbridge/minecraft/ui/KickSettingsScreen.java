@@ -547,7 +547,7 @@ public final class KickSettingsScreen extends ScbScreen {
 
         String platform = platformField == null ? "Kick" : platformField.getValue();
 
-        return MinecraftChatBridge.buildIncomingComponent(format, platform, "ExampleUser", "Hello!");
+        return MinecraftChatBridge.buildIncomingComponent(format, platform, true, "ExampleUser", "Hello!");
     }
 
     private void release(Button button) {
