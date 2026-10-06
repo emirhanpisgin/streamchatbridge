@@ -1,5 +1,6 @@
 package com.kryp.streamchatbridge.minecraft;
 
+import com.kryp.streamchatbridge.StreamChatBridge;
 import com.kryp.streamchatbridge.StreamChatBridgeClient;
 import com.kryp.streamchatbridge.chat.PlatformChatMessage;
 import com.kryp.streamchatbridge.config.ConfigManager;
@@ -11,8 +12,12 @@ import com.kryp.streamchatbridge.util.Threads;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+//? if >=1.21.9 {
+import net.minecraft.network.chat.FontDescription;
+//?}
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.sounds.SoundEvents;
 
@@ -29,6 +34,17 @@ public final class MinecraftChatBridge {
      * combined settings screen.
      */
     public static final String DEFAULT_FORMAT = TWITCH_DEFAULT_FORMAT;
+
+    /** Bitmap-font style for badge icons (see the font resource). */
+    private static final Style BADGE_FONT_STYLE = createBadgeFontStyle();
+
+    private static Style createBadgeFontStyle() {
+        //? if >=1.21.9 {
+        return Style.EMPTY.withFont(new FontDescription.Resource(StreamChatBridge.id("badges")));
+        //?} else {
+        /*return Style.EMPTY.withFont(StreamChatBridge.id("badges"));
+        *///?}
+    }
 
     private MinecraftChatBridge() {
     }
@@ -356,18 +372,34 @@ public final class MinecraftChatBridge {
                 continue;
             }
 
-            ChatFormatting badgeColor = switch (badge) {
-                case "broadcaster" -> ChatFormatting.RED;
+            char glyph = badgeGlyph(badge);
 
-                case "mod" -> ChatFormatting.GREEN;
+            if (glyph == 0) {
 
-                case "vip" -> ChatFormatting.LIGHT_PURPLE;
+                continue;
+            }
 
-                default -> ChatFormatting.GOLD;
-            };
+            appendPart(result, String.valueOf(glyph), BADGE_FONT_STYLE);
 
-            appendPart(result, "[" + badge + "] ", badgeColor);
+            appendPart(result, " ", (ChatFormatting) null);
         }
+    }
+
+    /** Badge icons are a bitmap font; see {@code assets/streamchatbridge/font/badges.json}. */
+    private static char badgeGlyph(String badge) {
+        return switch (badge) {
+            case "broadcaster" -> '\uE000';
+
+            case "mod" -> '\uE001';
+
+            case "vip" -> '\uE002';
+
+            case "sub" -> '\uE003';
+
+            case "founder" -> '\uE004';
+
+            default -> 0;
+        };
     }
 
     private static void appendPart(MutableComponent result, String text, ChatFormatting color) {
@@ -392,6 +424,20 @@ public final class MinecraftChatBridge {
         MutableComponent component = ScbText.literal(sanitize(text));
 
         component.withStyle(style -> style.withColor(TextColor.fromRgb(rgbColor)));
+
+        result.append(component);
+    }
+
+    private static void appendPart(MutableComponent result, String text, Style style) {
+        if (text.isEmpty()) {
+            return;
+        }
+
+        MutableComponent component = ScbText.literal(sanitize(text));
+
+        if (style != null) {
+            component.withStyle(style);
+        }
 
         result.append(component);
     }

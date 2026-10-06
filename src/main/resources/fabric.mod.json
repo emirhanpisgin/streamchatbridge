@@ -29,6 +29,7 @@
     "${command_api}": "*",
     "${key_module}": "*",
     "fabric-lifecycle-events-v1": "*",
+    "fabric-resource-loader-v0": "*",
     "minecraft": "${minecraft}",
     "java": ">=${java}"
   }

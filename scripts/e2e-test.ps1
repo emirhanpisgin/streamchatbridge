@@ -28,6 +28,7 @@ param(
     [string]$ProbeText = "",
     [string]$ExtraChat = "",
     [string]$ExtraEcho = "",
+    [switch]$Screenshot,
     [string]$BuildJdk = "",
     [int]$JoinTimeoutSec = 300,
     [int]$EchoTimeoutSec = 45,
@@ -248,6 +249,27 @@ if ($joined) {
         } else {
             Write-Report "RESULT FAIL"
             Select-String -Path $LogPath -Pattern "$Probe|Twitch|Kick|Stream Chat Bridge" -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { Write-Report ("  " + $_.Line) }
+        }
+
+        if ($Screenshot) {
+            $shotDir = Join-Path $Root "build\e2e\screenshots"
+            New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
+            $shotsDir = Join-Path $RunDir "screenshots"
+            $existing = Get-ChildItem $shotsDir -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $lastBefore = if ($existing) { $existing.LastWriteTime } else { [datetime]::MinValue }
+            [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            Start-Sleep -Milliseconds 300
+            Post-Key -Handle $game.MainWindowHandle -Vk 0x71
+            Start-Sleep -Seconds 2
+            [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            $shots = @(Get-ChildItem $shotsDir -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)
+            if ($shots.Count -gt 0) {
+                $dest = Join-Path $shotDir "$Node-chat.png"
+                Copy-Item -LiteralPath $shots[0].FullName -Destination $dest -Force
+                Write-Report "screenshot: $dest"
+            } else {
+                Write-Report "screenshot: none produced"
+            }
         }
     }
 } else {
