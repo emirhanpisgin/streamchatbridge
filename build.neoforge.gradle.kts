@@ -97,8 +97,16 @@ tasks {
         // neoforge.mods.toml happened with NeoForge 20.5 (FML 3.x).
         val legacyModsToml = sc.current.parsed < "1.20.5"
         inputs.property("legacyModsToml", legacyModsToml)
+        // NeoForge 26.3 deprecates `logoFile` and pops a modal "warning while loading
+        // mods" screen for it (which also blocks quick-play E2E joins); `iconFile` is
+        // the square-icon replacement there.
+        val newIconProperty = sc.current.parsed >= "26.3"
+        inputs.property("newIconProperty", newIconProperty)
         filesMatching("META-INF/neoforge.mods.toml") {
             expand(props)
+            if (newIconProperty) {
+                filter { line: String -> line.replace("logoFile =", "iconFile =") }
+            }
             if (legacyModsToml) name = "mods.toml"
         }
         filesMatching("pack.mcmeta") { expand(props) }

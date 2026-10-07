@@ -167,9 +167,46 @@ public static class ScbWin32 {
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [DllImport("kernel32.dll")] public static extern uint GetTickCount();
 }
 "@
 Add-Type -AssemblyName System.Windows.Forms
+
+# Window the user had focused before the harness first stole focus, restored at
+# the end so background runs do not leave the (often off-screen) game focused.
+$script:PrevForeground = [IntPtr]::Zero
+
+function Restore-Foreground {
+    if ($script:PrevForeground -eq [IntPtr]::Zero) { return }
+    $target = $script:PrevForeground
+    $foreground = [ScbWin32]::GetForegroundWindow()
+    if ($foreground -eq $target) { return }
+    $foregroundPid = [uint32]0
+    [ScbWin32]::GetWindowThreadProcessId($foreground, [ref]$foregroundPid) | Out-Null
+    $currentThread = [ScbWin32]::GetCurrentThreadId()
+    [ScbWin32]::AttachThreadInput($currentThread, $foregroundPid, $true) | Out-Null
+    [ScbWin32]::SetForegroundWindow($target) | Out-Null
+    [ScbWin32]::AttachThreadInput($currentThread, $foregroundPid, $false) | Out-Null
+}
+
+# Focus-stealing input is only safe while the user is not at the keyboard:
+# otherwise SendKeys types into whatever window has focus. Wait until the
+# keyboard/mouse have been idle, then proceed (false = gave up, skip input).
+function Wait-UserIdle {
+    param([int]$IdleSeconds = 20, [int]$TimeoutSec = 1800)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        $lii = New-Object ScbWin32+LASTINPUTINFO
+        $lii.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($lii)
+        [ScbWin32]::GetLastInputInfo([ref]$lii) | Out-Null
+        $idle = ([ScbWin32]::GetTickCount() - $lii.dwTime) / 1000
+        if ($idle -ge $IdleSeconds) { return $true }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
 
 function Get-GameWindow {
     param([datetime]$After = [datetime]::MinValue)
@@ -187,6 +224,9 @@ function Force-Foreground {
     param([IntPtr]$Handle)
     [ScbWin32]::ShowWindow($Handle, 9) | Out-Null
     $foreground = [ScbWin32]::GetForegroundWindow()
+    if ($script:PrevForeground -eq [IntPtr]::Zero -and $foreground -ne $Handle) {
+        $script:PrevForeground = $foreground
+    }
     $foregroundPid = [uint32]0
     [ScbWin32]::GetWindowThreadProcessId($foreground, [ref]$foregroundPid) | Out-Null
     $currentThread = [ScbWin32]::GetCurrentThreadId()
@@ -212,6 +252,10 @@ function Post-Key {
 function Send-KeyWithFakeFocus {
     param([IntPtr]$Handle, [int]$Vk, [string]$SendKeysKey)
     if ($Focus) {
+        if ([ScbWin32]::GetForegroundWindow() -ne $Handle -and -not (Wait-UserIdle)) {
+            Write-Report "focus: user active for too long; skipping key send"
+            return
+        }
         $focused = $false
         for ($attempt = 0; $attempt -lt 5 -and -not $focused; $attempt++) {
             $focused = Force-Foreground -Handle $Handle
@@ -251,6 +295,10 @@ function Capture-Window {
 function Send-ChatLine {
     param([IntPtr]$Handle, [string]$Text)
     if ($Focus) {
+        if ([ScbWin32]::GetForegroundWindow() -ne $Handle -and -not (Wait-UserIdle)) {
+            Write-Report "focus: user active for too long; skipping chat input"
+            return
+        }
         $focused = $false
         for ($attempt = 0; $attempt -lt 5 -and -not $focused; $attempt++) {
             $focused = Force-Foreground -Handle $Handle
@@ -258,7 +306,10 @@ function Send-ChatLine {
         }
         if (-not $focused) { Write-Report "focus: could not foreground the game window" }
         # Per-char SendKeys sticks Shift on shifted characters (probe arrives as
-        # T!E2E-...); paste the line from the clipboard instead.
+        # T!E2E-...); paste the line from the clipboard instead. The user's
+        # clipboard is saved and restored around it.
+        $savedClipboard = $null
+        try { $savedClipboard = Get-Clipboard -Raw -ErrorAction Stop } catch { }
         Set-Clipboard -Value $Text
         [System.Windows.Forms.SendKeys]::SendWait("t")
         Start-Sleep -Milliseconds 600
@@ -266,6 +317,9 @@ function Send-ChatLine {
         Start-Sleep -Milliseconds 300
         [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
         Start-Sleep -Milliseconds 700
+        if ($null -ne $savedClipboard) {
+            try { Set-Clipboard -Value $savedClipboard -ErrorAction Stop } catch { }
+        }
         return
     }
 
@@ -473,6 +527,8 @@ if ($joined) {
                 Write-Report "screen: FAIL no screenshot produced by F2 or PrintWindow"
             }
         }
+
+        Restore-Foreground
 
         if ((-not $serverGot) -and $echo -and $status -and ($NoScreen -or $screenshot)) {
             Write-Report "RESULT PASS"

@@ -94,9 +94,46 @@ public static class ScbWin32 {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [DllImport("kernel32.dll")] public static extern uint GetTickCount();
 }
 "@
 Add-Type -AssemblyName System.Windows.Forms
+
+# Window the user had focused before the harness first stole focus, restored at
+# the end so background runs do not leave the (often off-screen) game focused.
+$script:PrevForeground = [IntPtr]::Zero
+
+function Restore-Foreground {
+    if ($script:PrevForeground -eq [IntPtr]::Zero) { return }
+    $target = $script:PrevForeground
+    $foreground = [ScbWin32]::GetForegroundWindow()
+    if ($foreground -eq $target) { return }
+    $foregroundPid = [uint32]0
+    [ScbWin32]::GetWindowThreadProcessId($foreground, [ref]$foregroundPid) | Out-Null
+    $currentThread = [ScbWin32]::GetCurrentThreadId()
+    [ScbWin32]::AttachThreadInput($currentThread, $foregroundPid, $true) | Out-Null
+    [ScbWin32]::SetForegroundWindow($target) | Out-Null
+    [ScbWin32]::AttachThreadInput($currentThread, $foregroundPid, $false) | Out-Null
+}
+
+# Focus-stealing input is only safe while the user is not at the keyboard:
+# otherwise SendKeys types into whatever window has focus. Wait until the
+# keyboard/mouse have been idle, then proceed (false = gave up, skip input).
+function Wait-UserIdle {
+    param([int]$IdleSeconds = 20, [int]$TimeoutSec = 1800)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        $lii = New-Object ScbWin32+LASTINPUTINFO
+        $lii.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($lii)
+        [ScbWin32]::GetLastInputInfo([ref]$lii) | Out-Null
+        $idle = ([ScbWin32]::GetTickCount() - $lii.dwTime) / 1000
+        if ($idle -ge $IdleSeconds) { return $true }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
 
 function Get-GameWindow {
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
@@ -111,6 +148,9 @@ function Force-Foreground {
     param([IntPtr]$Handle)
     [ScbWin32]::ShowWindow($Handle, 9) | Out-Null
     $foreground = [ScbWin32]::GetForegroundWindow()
+    if ($script:PrevForeground -eq [IntPtr]::Zero -and $foreground -ne $Handle) {
+        $script:PrevForeground = $foreground
+    }
     $foregroundPid = [uint32]0
     [ScbWin32]::GetWindowThreadProcessId($foreground, [ref]$foregroundPid) | Out-Null
     $currentThread = [ScbWin32]::GetCurrentThreadId()
@@ -136,6 +176,10 @@ function Post-Key {
 function Send-ChatLine {
     param([IntPtr]$Handle, [string]$Text, [switch]$Command)
     if ($Focus) {
+        if ([ScbWin32]::GetForegroundWindow() -ne $Handle -and -not (Wait-UserIdle)) {
+            Write-Report "focus: user active for too long; skipping chat input"
+            return
+        }
         Force-Foreground -Handle $Handle | Out-Null
         [System.Windows.Forms.SendKeys]::SendWait("t")
         Start-Sleep -Milliseconds 700
@@ -257,11 +301,27 @@ if ($joined) {
             $shotsDir = Join-Path $RunDir "screenshots"
             $existing = Get-ChildItem $shotsDir -Filter *.png -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             $lastBefore = if ($existing) { $existing.LastWriteTime } else { [datetime]::MinValue }
-            [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-            Start-Sleep -Milliseconds 300
-            Post-Key -Handle $game.MainWindowHandle -Vk 0x71
-            Start-Sleep -Seconds 2
-            [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            if ($Focus) {
+                # Posted keys can be ignored when the window is unfocused (26.x);
+                # focus it briefly, only while the user is idle.
+                $idleOk = $true
+                if ([ScbWin32]::GetForegroundWindow() -ne $game.MainWindowHandle) {
+                    $idleOk = Wait-UserIdle
+                }
+                if ($idleOk) {
+                    Force-Foreground -Handle $game.MainWindowHandle | Out-Null
+                    [System.Windows.Forms.SendKeys]::SendWait("{F2}")
+                    Start-Sleep -Seconds 2
+                } else {
+                    Write-Report "screenshot: user active, skipping focus screenshot"
+                }
+            } else {
+                [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0007, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+                Start-Sleep -Milliseconds 300
+                Post-Key -Handle $game.MainWindowHandle -Vk 0x71
+                Start-Sleep -Seconds 2
+                [ScbWin32]::PostMessage($game.MainWindowHandle, 0x0008, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            }
             $shots = @(Get-ChildItem $shotsDir -Filter *.png -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $lastBefore } | Sort-Object LastWriteTime -Descending)
             if ($shots.Count -gt 0) {
                 $dest = Join-Path $shotDir "$Node-chat.png"
@@ -271,6 +331,8 @@ if ($joined) {
                 Write-Report "screenshot: none produced"
             }
         }
+
+        Restore-Foreground
     }
 } else {
     Write-Report "RESULT FAIL (never joined)"
