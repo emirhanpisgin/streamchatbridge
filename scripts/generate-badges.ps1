@@ -28,17 +28,17 @@ $icons = [ordered]@{
         "..#####..",
         "...###..."
     )
-    # \uE001 mod - Minecraft-style sword (bright blade edge, perpendicular guard, handle, pommel)
+    # \uE001 mod - hammer (bright head, shaded lower edge, darker handle)
     mod = @(
-        "........#",
-        ".......#+",
-        "......#+.",
-        ".-...#+..",
-        "..-.#+...",
-        "...##....",
-        "..-.-....",
-        ".-...-...",
-        "--......."
+        ".######..",
+        ".######..",
+        ".######..",
+        ".++++++..",
+        "...--....",
+        "...--....",
+        "...--....",
+        "...--....",
+        "...--...."
     )
     # \uE002 vip - pink diamond (darker lower facets)
     vip = @(
