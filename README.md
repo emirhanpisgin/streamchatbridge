@@ -1,73 +1,64 @@
-# Example Mod — multi-loader Minecraft template
+# Stream Chat Bridge
 
-One shared codebase that builds for **Fabric, Forge and NeoForge** across Minecraft
-versions, powered by [Stonecutter](https://stonecutter.kikugie.dev/). This template was
-extracted from a production mod, so it carries all the build fixes and workarounds that
-were needed to make every loader and era compile and run.
+Bridges Minecraft chat with **Twitch** and **Kick**. Your in-game chat goes to your
+stream, and stream chat appears in Minecraft with platform colors, badges, mention
+highlights and configurable message formats.
 
-Read **[AGENTS.md](AGENTS.md)** for the full operational guide — it covers the node
-system, long-running decompile builds, dev-run directories, known traps, and notes for
-AI coding agents.
+Available on Modrinth: **https://modrinth.com/mod/stream-chat-bridge**
 
-## Requirements
+## Features
 
-- **JDK 25** to run the Gradle daemon (all nodes)
-- Game run JDKs (8 / 17 / 21 / 25, depending on the Minecraft era) are downloaded
-  automatically via Gradle toolchains
+- **Two-way bridge** for Twitch (EventSub WebSocket) and Kick (Pusher WebSocket)
+- **Rich chat display**: platform colors, badges (streamer, mod, VIP, sub, founder),
+  mention highlighting with optional sound, per-platform message formats
+- **Prefix-based sending** from Minecraft chat: `t!` sends to Twitch, `!k ` to Kick
+  (both configurable; unmatched messages stay local)
+- **F8 dashboard**: Twitch/Kick login (device flows), channel selection, message
+  formats, chat toggles and reconnect/log-out controls
+- **Quiet by default**: staff-only badges and errors-only join status, both toggleable
+- Client-side only; works in singleplayer and on servers
 
-## Quick start
+## Supported versions
+
+One mod build per loader covers a whole Minecraft range (see the tag on each file):
+
+| Loader   | Minecraft        |
+|----------|------------------|
+| Fabric   | 1.17.1 – 26.3    |
+| Forge    | 1.17.1 – 26.3    |
+| NeoForge | 1.20.4 – 26.3    |
+
+## Installation
+
+1. Install Fabric, Forge or NeoForge for your Minecraft version.
+2. Download the matching jar from [Modrinth](https://modrinth.com/mod/stream-chat-bridge).
+   On Fabric, [Fabric API](https://modrinth.com/mod/fabric-api) is required.
+3. Drop the jar into your `mods` folder and launch the game.
+4. Press **F8** in-game to connect your Twitch and/or Kick account.
+
+## Configuration
+
+- Settings: `.minecraft/config/streamchatbridge.json`
+- Secrets (tokens) are stored outside the mod config, in the per-user config
+  directory: `%APPDATA%\streamchatbridge\` on Windows
+  (`~/Library/Application Support/streamchatbridge` on macOS,
+  `$XDG_CONFIG_HOME/streamchatbridge` on Linux).
+- Default prefixes: `t!` for Twitch, `!k ` for Kick. Both are configurable in the
+  F8 dashboard together with channels, formats and chat toggles.
+
+## Building from source
+
+Multi-loader build powered by [Stonecutter](https://stonecutter.kikugie.dev/);
+the shared sources build for every loader and Minecraft era (37 nodes, 1.17.1 through
+26.3). JDK 25 runs the Gradle daemon; era-specific run JDKs are selected automatically.
 
 ```powershell
-.\gradlew.bat --no-daemon --no-configuration-cache :26.2-fabric:build
-.\gradlew.bat --no-daemon --no-configuration-cache :26.1-forge:build
-.\gradlew.bat --no-daemon --no-configuration-cache :26.1-neoforge:buildAndCollect
+.\gradlew.bat --no-daemon --no-configuration-cache :26.3-fabric:buildAndCollect
+.\gradlew.bat --no-daemon --no-configuration-cache :26.3-forge:buildAndCollect
+.\gradlew.bat --no-daemon --no-configuration-cache :26.3-neoforge:buildAndCollect
 ```
 
 `buildAndCollect` copies the jar and sources jar into `build/libs/<mod version>/`.
-
-## Nodes
-
-| Node             | Loader   | Minecraft |
-|------------------|----------|-----------|
-| `26.2-fabric`    | Fabric   | 26.2      |
-| `26.1-forge`     | Forge    | 26.1      |
-| `26.1-neoforge`  | NeoForge | 26.1      |
-
-## Creating a new mod from this template
-
-```powershell
-.\new-mod.ps1 -Path C:\dev\projects\mymod -ModId mymod -ModName "My Mod" -Package com.example.mymod
-```
-
-The script copies the template, renames the mod id / package / class prefixes /
-URLs, and initializes a git repository. Optional parameters: `-ClassPrefix`,
-`-Author`, `-RepoUrl`, `-ModrinthSlug`, `-NoGit`.
-
-## Adding Minecraft versions
-
-Add a node in `settings.gradle.kts` and a matching section in
-`stonecutter.properties.toml`. The checklist (including the NeoForge
-`neoforge-moddev-bundle` requirement and the `pack_format` rule) is in
-[AGENTS.md section 6](AGENTS.md#6-adding-a-minecraft-version-node).
-
-## Dev runs
-
-```powershell
-.\gradlew.bat --no-daemon --no-configuration-cache :26.2-fabric:runClient
-.\gradlew.bat --no-daemon --no-configuration-cache :26.1-neoforge:runServer
-```
-
-Fabric and Forge share the root `run/` directory; NeoForge nodes use
-`versions/<node>/run`. See AGENTS.md section 5 for details.
-
-## Publishing
-
-```powershell
-$env:MODRINTH_TOKEN = "<token>"
-.\scripts\publish-modrinth.ps1 -Loader neoforge -IncludeSources
-```
-
-Dry-run without a token by adding `-DryRun`.
 
 ## License
 
