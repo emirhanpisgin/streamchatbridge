@@ -1,6 +1,7 @@
 modLoader="javafml"
 loaderVersion="[1,)"
 license = "MIT"
+issueTrackerURL = "https://github.com/emirhanpisgin/streamchatbridge/issues"
 
 [[mods]]
 modId = "${id}"
@@ -8,6 +9,7 @@ displayName = "${name}"
 version = "${version}"
 description = "Bridges Minecraft chat with Twitch and Kick."
 license = "MIT"
+displayURL = "https://github.com/emirhanpisgin/streamchatbridge"
 logoFile = "assets/streamchatbridge/icon.png"
 displayTest = "IGNORE_ALL_VERSION"
 

@@ -2,6 +2,7 @@
 modLoader="javafml"
 loaderVersion="[${fml},)"
 license="MIT"
+issueTrackerURL="https://github.com/emirhanpisgin/streamchatbridge/issues"
 
 [[mods]]
 modId="${id}"
@@ -9,6 +10,7 @@ version="${version}"
 displayName="${name}"
 description="Bridges Minecraft chat with Twitch and Kick."
 license="MIT"
+displayURL="https://github.com/emirhanpisgin/streamchatbridge"
 logoFile="assets/streamchatbridge/icon.png"
 displayTest="IGNORE_ALL_VERSION"
 
