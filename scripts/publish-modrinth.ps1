@@ -3,7 +3,7 @@ param(
     [string]$Version = "1.0.0",
     [ValidateSet("fabric", "forge", "neoforge")]
     [string]$Loader = "fabric",
-    [string]$ProjectSlug = "streamchatbridge",
+    [string]$ProjectSlug = "stream-chat-bridge",
     [string]$ArtifactsDir = "",
     [string]$Changelog = "",
     [switch]$IncludeSources,
@@ -15,6 +15,13 @@ $Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 $api = "https://api.modrinth.com/v2"
 $fabricApiProjectId = "P7dR8mSH"
+
+# Local jars are named after `mod.id`, the Modrinth project after its slug, and
+# the version title after the display name - keep the three separate.
+$propsText = Get-Content (Join-Path $Root "stonecutter.properties.toml") -Raw
+$artifactPrefix = if ($propsText -match '(?m)^mod\.id\s*=\s*"([^"]+)"') { $Matches[1] } else { $ProjectSlug }
+$modName = if ($propsText -match '(?m)^mod\.name\s*=\s*"([^"]+)"') { $Matches[1] } else { $ProjectSlug }
+$loaderLabel = switch ($Loader) { "fabric" { "Fabric" } "forge" { "Forge" } "neoforge" { "NeoForge" } }
 
 if (-not $ArtifactsDir) {
     $ArtifactsDir = Join-Path $Root "build\libs\$Version"
@@ -140,9 +147,9 @@ $allVersions = if ($project) { @(Get-Json "/project/$ProjectSlug/version") } els
 
 foreach ($t in $targets) {
     $mc = $t.Mc
-    $jarName = "$ProjectSlug-$Loader-$Version+$mc.jar"
+    $jarName = "$artifactPrefix-$Loader-$Version+$mc.jar"
     $jarPath = Join-Path $ArtifactsDir $jarName
-    $srcName = "$ProjectSlug-$Loader-$Version+$mc-sources.jar"
+    $srcName = "$artifactPrefix-$Loader-$Version+$mc-sources.jar"
     $srcPath = Join-Path $ArtifactsDir $srcName
     $versionNumber = "$Version+$mc"
 
@@ -157,7 +164,7 @@ foreach ($t in $targets) {
         $deps = @(@{ project_id = $fabricApiProjectId; dependency_type = "required" })
     }
 
-    $name = "$ProjectSlug $Version for $mc ($Loader)"
+    $name = "$modName $Version for $mc ($loaderLabel)"
 
     if (@($allVersions | Where-Object { $_.version_number -eq $versionNumber -and $_.loaders -contains $Loader }).Count -gt 0) {
         "SKIP $versionNumber ($Loader already exists)"
