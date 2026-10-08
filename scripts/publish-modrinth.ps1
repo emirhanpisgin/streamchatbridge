@@ -106,7 +106,7 @@ $loaderHas = switch ($Loader) {
 
 $targets = @()
 foreach ($node in Get-PermanentNodes $Loader) {
-    $games = Get-GamesInRange $node.Compat $allTags $loaderHas
+    $games = @(Get-GamesInRange $node.Compat $allTags $loaderHas)
     if ($games.Count -eq 0) { Write-Warning "No game versions for $Loader $($node.Mc) ($($node.Compat))"; continue }
     $targets += [pscustomobject]@{ Mc = $node.Mc; Games = $games }
 }
