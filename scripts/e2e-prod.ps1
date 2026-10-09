@@ -39,9 +39,15 @@ $NativesDir = Join-Path $Dir "natives"
 $LibsDir = Join-Path $Dir "libraries"
 New-Item -ItemType Directory -Force -Path $ModsDir, $NativesDir, $LibsDir, (Join-Path $Dir "config") | Out-Null
 
-$script:modRoot = if (Test-Path "C:\Users\Kryp\scoop\persist\gradle\.gradle\caches\modules-2\files-2.1") {
-    "C:\Users\Kryp\scoop\persist\gradle\.gradle\caches\modules-2\files-2.1"
-} else { Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1" }
+# Gradle caches holding the Maven artifacts the harness can reuse (avoiding
+# downloads): GRADLE_USER_HOME, the default ~/.gradle, and the scoop-managed
+# Gradle home layout.
+$script:modRoot = @(
+    if ($env:GRADLE_USER_HOME) { Join-Path $env:GRADLE_USER_HOME "caches\modules-2\files-2.1" }
+    Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1"
+    Join-Path $env:USERPROFILE "scoop\persist\gradle\.gradle\caches\modules-2\files-2.1"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $script:modRoot) { throw "No Gradle module cache found (set GRADLE_USER_HOME)." }
 $script:modIndex = $null
 $script:downloads = 0
 

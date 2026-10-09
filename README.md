@@ -18,6 +18,12 @@ Available on Modrinth: **https://modrinth.com/mod/stream-chat-bridge**
 - **Quiet by default**: staff-only badges and errors-only join status, both toggleable
 - Client-side only; works in singleplayer and on servers
 
+## Screenshots
+
+The F8 dashboard (login, channels, per-platform settings and chat toggles):
+
+![Stream Chat Bridge dashboard](docs/screenshots/dashboard-26.3-fabric.png)
+
 ## Supported versions
 
 One mod build per loader covers a whole Minecraft range (see the tag on each file):

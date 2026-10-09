@@ -136,7 +136,7 @@ dependencies {
     }
     // The EventBus validator annotation processor cannot load the compiler type elements it needs
     // when compiling for older Minecraft with a modern JDK, so it's only applied where it works.
-    // It only validates @SubscribeEvent usage, which this template doesn't use.
+    // It only validates @SubscribeEvent usage, which this mod doesn't use.
     if (sc.current.parsed >= "26.1") {
         annotationProcessor("net.minecraftforge:eventbus-validator:7.0.5")
     }
