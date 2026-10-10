@@ -103,8 +103,14 @@ function Get-ForgeVersion([string]$mc) {
 
 function Get-NeoForgeVersion([string]$mc) {
     $xml = [xml](Invoke-WebRequest "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml" -UseBasicParsing -TimeoutSec 60).Content
-    $short = ($mc -split '\.')[1..2] -join '.'
-    $versions = @($xml.metadata.versioning.versions.version | Where-Object { $_ -match ('^' + [regex]::Escape($short) + '(\.|$)') -and $_ -notmatch 'beta' })
+    # NeoForge versions are "<mc-short>.<minor>...": "1.20.4" -> "20.4.x", but the
+    # 26.x scheme is already the MC version itself ("26.3" -> "26.3.x").
+    $parts = $mc -split '\.'
+    $short = if ([int]$parts[0] -ge 26) { $mc } else { ($parts[1..2] -join '.') }
+    $all = @($xml.metadata.versioning.versions.version | Where-Object { $_ -match ('^' + [regex]::Escape($short) + '(\.|$)') })
+    $releases = @($all | Where-Object { $_ -notmatch 'beta' })
+    # 26.x lines are beta-only; fall back to betas when no release exists.
+    $versions = if ($releases.Count -gt 0) { $releases } else { $all }
     if ($versions.Count -eq 0) { throw "No NeoForge build for $mc" }
     return $versions[-1]
 }
