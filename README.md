@@ -8,7 +8,7 @@ Available on Modrinth: **https://modrinth.com/mod/stream-chat-bridge**
 
 ## Features
 
-- **Two-way bridge** for Twitch (EventSub WebSocket) and Kick (Pusher WebSocket)
+- **Two-way bridge** for Twitch (EventSub WebSocket) and Kick (negotiated Centrifugo WebSocket)
 - **Rich chat display**: platform colors, badges (streamer, mod, VIP, sub, founder),
   mention highlighting with optional sound, per-platform message formats
 - **Prefix-based sending** from Minecraft chat: `t!` sends to Twitch, `!k ` to Kick

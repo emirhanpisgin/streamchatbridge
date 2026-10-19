@@ -3,6 +3,7 @@ package com.kryp.streamchatbridge.kick;
 import com.kryp.streamchatbridge.StreamChatBridge;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kryp.streamchatbridge.chat.PlatformChatMessage;
@@ -17,6 +18,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -27,11 +31,17 @@ public final class KickChatClient {
         CONNECTING, CONNECTED, DISCONNECTED
     }
 
-    private static final String PUSHER_KEY = "32cbd69e4b950bf97679";
+    /** Kick's negotiated realtime transport (guest flow), replacing the old Pusher reader. */
+    private static final String REALTIME_BASE = "https://web.kick.com/api/v1/realtime";
 
-    private static final String PUSHER_URL = "wss://ws-us2.pusher.com/app/" + PUSHER_KEY + "?protocol=7&client=streamchatbridge&version=1.0.0&flash=false";
+    private static final String CLIENT_NAME = "streamchatbridge";
 
-    private static final String CHAT_EVENT = "App\\Events\\ChatMessageEvent";
+    private static final String CHAT_EVENT = "ChatMessageEvent";
+
+    /** Refresh the guest session this long before the server-advertised TTL. */
+    private static final long SESSION_REFRESH_MARGIN_MS = 300_000L;
+
+    private static final long DEFAULT_SESSION_TTL_SECONDS = 2_700L;
 
     /** Kick sends emotes as {@code [emote:ID:NAME]}; only the name is shown. */
     private static final Pattern EMOTE_PATTERN = Pattern.compile("\\[emote:\\d+:([^\\]]+)\\]");
@@ -65,6 +75,9 @@ public final class KickChatClient {
     private volatile int reconnectAttempt = 0;
 
     private volatile long connectionGeneration = 0;
+
+    /** Generation whose session refresh is already scheduled (guards duplicate timers). */
+    private volatile long refreshScheduledFor = -1;
 
     public KickChatClient(Consumer<PlatformChatMessage> messageHandler) {
         this.messageHandler = messageHandler;
@@ -132,9 +145,16 @@ public final class KickChatClient {
 
             channelName = resolvedChannelName;
 
+            Session session = prepareSession(chatroomId);
+
+            if (generation != connectionGeneration || shuttingDown || !shouldStayConnected) {
+
+                return false;
+            }
+
             httpClient.newWebSocketBuilder()
                     .connectTimeout(Duration.ofSeconds(10))
-                    .buildAsync(URI.create(PUSHER_URL), new PusherSocketListener(generation))
+                    .buildAsync(URI.create(session.url), new KickSocketListener(generation, session))
                     .exceptionally(error -> {
                         handleConnectionFailure(generation, error);
 
@@ -179,93 +199,213 @@ public final class KickChatClient {
     }
 
     /*
-     * Pusher protocol
+     * Realtime transport (Centrifugo over Kick's negotiated WebSocket)
      */
 
-    private void handlePusherMessage(String raw, long generation) {
-        if (raw == null || raw.isBlank()) {
+    private static final class Session {
+
+        private final String url;
+
+        private final String token;
+
+        private final Map<String, String> channelTokens;
+
+        private Session(String url, String token, Map<String, String> channelTokens) {
+            this.url = url;
+            this.token = token;
+            this.channelTokens = channelTokens;
+        }
+    }
+
+    private Session prepareSession(String resolvedChatroomId) throws IOException, InterruptedException {
+        String clientId = UUID.randomUUID().toString();
+
+        JsonArray providers = new JsonArray();
+
+        JsonObject pusher = new JsonObject();
+
+        pusher.addProperty("provider", "pusher");
+
+        providers.add(pusher);
+
+        JsonObject centrifugo = new JsonObject();
+
+        centrifugo.addProperty("provider", "centrifugo");
+
+        providers.add(centrifugo);
+
+        JsonObject capabilities = new JsonObject();
+
+        capabilities.add("accepted_providers", providers);
+
+        JsonObject client = new JsonObject();
+
+        client.addProperty("id", clientId);
+
+        client.addProperty("type", "web");
+
+        JsonObject connectionRequest = new JsonObject();
+
+        connectionRequest.add("client", client);
+
+        connectionRequest.add("capabilities", capabilities);
+
+        JsonObject negotiated = postJson("/connection", connectionRequest);
+
+        String mode = readString(negotiated, "mode");
+
+        if (!"websocket".equals(mode)) {
+            throw new IOException("Kick realtime negotiation did not return a WebSocket transport");
+        }
+
+        String socketUrl = null;
+
+        if (negotiated.has("connections") && negotiated.get("connections").isJsonArray()) {
+            for (JsonElement element : negotiated.getAsJsonArray("connections")) {
+                if (!element.isJsonObject()) {
+
+                    continue;
+                }
+
+                JsonObject entry = element.getAsJsonObject();
+
+                if (!"centrifugo".equals(readString(entry, "provider"))) {
+
+                    continue;
+                }
+
+                if (entry.has("credentials") && entry.get("credentials").isJsonObject()) {
+                    socketUrl = readString(entry.getAsJsonObject("credentials"), "url");
+                }
+
+                break;
+            }
+        }
+
+        if (socketUrl == null || socketUrl.isBlank()) {
+            throw new IOException("Kick realtime negotiation returned no Centrifugo descriptor");
+        }
+
+        URI socketUri = URI.create(socketUrl);
+
+        String host = socketUri.getHost();
+
+        if (!"wss".equalsIgnoreCase(socketUri.getScheme()) || host == null || !host.endsWith(".kick.com")) {
+            throw new IOException("Kick realtime negotiation returned an unexpected socket destination");
+        }
+
+        JsonObject authorizationRequest = new JsonObject();
+
+        authorizationRequest.addProperty("client_id", clientId);
+
+        JsonObject authorization = postJson("/auth/connection", authorizationRequest);
+
+        String token = readString(authorization, "token");
+
+        if (token == null || token.isBlank()) {
+            throw new IOException("Kick realtime authorization returned no token");
+        }
+
+        Map<String, String> channelTokens = new HashMap<>();
+
+        for (String channel : realtimeChannels(resolvedChatroomId)) {
+            JsonObject channelRequest = new JsonObject();
+
+            channelRequest.addProperty("channel", channel);
+
+            JsonObject channelAuthorization = postJson("/auth/channel", channelRequest);
+
+            String channelToken = readString(channelAuthorization, "token");
+
+            if (channelToken != null && !channelToken.isBlank()) {
+                channelTokens.put(channel, channelToken);
+            }
+        }
+
+        return new Session(socketUrl, token, channelTokens);
+    }
+
+    private JsonObject postJson(String path, JsonObject body) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(REALTIME_BASE + path))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("Origin", "https://kick.com")
+                .header("Referer", "https://kick.com/")
+                .header("x-app-platform", "web")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Kick realtime " + path + " failed with HTTP " + response.statusCode());
+        }
+
+        JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
+
+        if (json == null) {
+            throw new IOException("Kick realtime " + path + " returned an empty response");
+        }
+
+        if (json.has("data") && json.get("data").isJsonObject()) {
+            return json.getAsJsonObject("data");
+        }
+
+        return json;
+    }
+
+    private void scheduleSessionRefresh(long generation, long ttlSeconds) {
+        long ttl = ttlSeconds > 60 ? ttlSeconds : DEFAULT_SESSION_TTL_SECONDS;
+
+        long delayMs = Math.max(30_000L, (ttl * 1_000L) - SESSION_REFRESH_MARGIN_MS);
+
+        if (refreshScheduledFor == generation) {
 
             return;
         }
 
-        JsonObject root = GSON.fromJson(raw, JsonObject.class);
+        refreshScheduledFor = generation;
 
-        if (root == null || !root.has("event") || root.get("event").isJsonNull()) {
+        Threads.start("streamchatbridge-kick-session-refresh", () -> {
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
 
-            return;
-        }
+                return;
+            }
 
-        String event = root.get("event").getAsString();
-
-        switch (event) {
-            case "pusher:connection_established" -> sendSubscribe();
-
-            case "pusher:ping" -> sendPong();
-
-            case "pusher_internal:subscription_succeeded" -> {
-                if (generation != connectionGeneration) {
+            synchronized (KickChatClient.this) {
+                if (shuttingDown || !shouldStayConnected || generation != connectionGeneration
+                        || connectionState != ConnectionState.CONNECTED) {
 
                     return;
                 }
 
-                reconnectScheduled = false;
+                String targetUsername = username;
 
-                resetReconnectBackoff();
+                if (targetUsername == null || targetUsername.isBlank()) {
 
-                setConnectionState(ConnectionState.CONNECTED);
-            }
-
-            case "pusher:error" -> StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick Pusher error: " + root.get("data"));
-
-            case CHAT_EVENT -> {
-                JsonElement data = root.get("data");
-
-                if (data != null && data.isJsonPrimitive()) {
-                    handleChatEvent(data.getAsString());
+                    return;
                 }
-            }
 
-            default -> {
+                connectionGeneration++;
+
+                long nextGeneration = connectionGeneration;
+
+                cleanupConnection();
+
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Refreshing Kick realtime session...");
+
+                connectInternal(targetUsername, nextGeneration);
             }
-        }
+        });
     }
 
-    private void sendSubscribe() {
-        WebSocket socket = webSocket;
-
-        if (socket == null || channelName == null) {
-
-            return;
-        }
-
-        JsonObject data = new JsonObject();
-
-        data.addProperty("channel", channelName);
-
-        JsonObject subscribe = new JsonObject();
-
-        subscribe.addProperty("event", "pusher:subscribe");
-
-        subscribe.add("data", data);
-
-        socket.sendText(GSON.toJson(subscribe), true);
-    }
-
-    private void sendPong() {
-        WebSocket socket = webSocket;
-
-        if (socket == null) {
-
-            return;
-        }
-
-        JsonObject pong = new JsonObject();
-
-        pong.addProperty("event", "pusher:pong");
-
-        pong.add("data", new JsonObject());
-
-        socket.sendText(GSON.toJson(pong), true);
+    private static String[] realtimeChannels(String resolvedChatroomId) {
+        return new String[]{"chatrooms." + resolvedChatroomId + ".v2", "chatroom_" + resolvedChatroomId};
     }
 
     /*
@@ -627,12 +767,14 @@ public final class KickChatClient {
     }
 
     private static String readString(JsonObject object, String key) {
-        if (!object.has(key) || object.get(key).isJsonNull()) {
+        if (object == null || !object.has(key) || object.get(key).isJsonNull()) {
 
             return null;
         }
 
-        return object.get(key).getAsString();
+        JsonElement value = object.get(key);
+
+        return value.isJsonPrimitive() ? value.getAsString() : null;
     }
 
     /*
@@ -679,14 +821,24 @@ public final class KickChatClient {
         return seconds + (seconds == 1 ? " second" : " seconds");
     }
 
-    private final class PusherSocketListener implements WebSocket.Listener {
+    private final class KickSocketListener implements WebSocket.Listener {
 
         private final long generation;
 
+        private final Session session;
+
+        private final String[] channels;
+
         private final StringBuilder buffer = new StringBuilder();
 
-        private PusherSocketListener(long generation) {
+        private int subscriptionAcks;
+
+        private boolean subscriptionsRequested;
+
+        private KickSocketListener(long generation, Session session) {
             this.generation = generation;
+            this.session = session;
+            this.channels = realtimeChannels(chatroomId);
         }
 
         @Override
@@ -701,6 +853,20 @@ public final class KickChatClient {
 
                 webSocket = socket;
             }
+
+            JsonObject connect = new JsonObject();
+
+            connect.addProperty("token", session.token);
+
+            connect.addProperty("name", CLIENT_NAME);
+
+            JsonObject frame = new JsonObject();
+
+            frame.addProperty("id", 1);
+
+            frame.add("connect", connect);
+
+            socket.sendText(GSON.toJson(frame), true);
 
             socket.request(1);
         }
@@ -720,15 +886,228 @@ public final class KickChatClient {
                 buffer.setLength(0);
 
                 try {
-                    handlePusherMessage(message, generation);
+                    handleFrames(message);
                 } catch (Exception e) {
-                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to handle Kick chat message: " + e.getMessage());
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Failed to handle Kick chat frame: " + e.getMessage());
                 }
             }
 
             socket.request(1);
 
             return null;
+        }
+
+        private void handleFrames(String raw) {
+            for (String part : raw.split("\r?\n")) {
+                if (part.isBlank()) {
+
+                    continue;
+                }
+
+                JsonObject frame = GSON.fromJson(part, JsonObject.class);
+
+                if (frame == null) {
+
+                    continue;
+                }
+
+                if (frame.size() == 0) {
+                    // Centrifugo application-level ping: answer with an empty object.
+                    WebSocket socket = webSocket;
+
+                    if (socket != null) {
+                        socket.sendText("{}", true);
+                    }
+
+                    continue;
+                }
+
+                if (frame.has("error")) {
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick realtime error: " + frame.get("error"));
+
+                    fail();
+
+                    return;
+                }
+
+                if (frame.has("disconnect")) {
+                    StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick realtime disconnected by server: " + frame.get("disconnect"));
+
+                    fail();
+
+                    return;
+                }
+
+                JsonElement idElement = frame.get("id");
+
+                boolean hasNumericId = idElement != null && idElement.isJsonPrimitive() && idElement.getAsJsonPrimitive().isNumber();
+
+                if (hasNumericId) {
+                    int id = idElement.getAsInt();
+
+                    if (id == 1 && frame.has("connect") && frame.get("connect").isJsonObject()) {
+                        JsonObject ack = frame.getAsJsonObject("connect");
+
+                        long ttl = DEFAULT_SESSION_TTL_SECONDS;
+
+                        JsonElement ttlElement = ack.get("ttl");
+
+                        if (ttlElement != null && ttlElement.isJsonPrimitive() && ttlElement.getAsJsonPrimitive().isNumber()) {
+                            ttl = ttlElement.getAsLong();
+                        }
+
+                        sendSubscriptions();
+
+                        scheduleSessionRefresh(generation, ttl);
+
+                        continue;
+                    }
+
+                    if (frame.has("subscribe")) {
+                        subscriptionAcks++;
+
+                        if (subscriptionsRequested && subscriptionAcks >= channels.length) {
+                            synchronized (KickChatClient.this) {
+                                if (generation != connectionGeneration) {
+
+                                    return;
+                                }
+
+                                reconnectScheduled = false;
+
+                                resetReconnectBackoff();
+
+                                setConnectionState(ConnectionState.CONNECTED);
+                            }
+                        }
+
+                        continue;
+                    }
+                }
+
+                if (frame.has("push") && frame.get("push").isJsonObject()) {
+                    JsonObject push = frame.getAsJsonObject("push");
+
+                    if (!push.has("pub") || !push.get("pub").isJsonObject()) {
+
+                        continue;
+                    }
+
+                    JsonObject publication = push.getAsJsonObject("pub");
+
+                    handlePublication(publication);
+                }
+            }
+        }
+
+        private void handlePublication(JsonObject publication) {
+            JsonElement payload = publication.get("data");
+
+            if (payload == null || payload.isJsonNull()) {
+
+                return;
+            }
+
+            JsonObject event;
+
+            if (payload.isJsonPrimitive()) {
+                event = GSON.fromJson(payload.getAsString(), JsonObject.class);
+            } else if (payload.isJsonObject()) {
+                event = payload.getAsJsonObject();
+            } else {
+
+                return;
+            }
+
+            if (event == null) {
+
+                return;
+            }
+
+            String name = readString(event, "event");
+
+            if (name == null) {
+                name = readString(event, "type");
+            }
+
+            if (name == null) {
+
+                return;
+            }
+
+            int separator = name.lastIndexOf('\\');
+
+            if (separator >= 0) {
+                name = name.substring(separator + 1);
+            }
+
+            if (!CHAT_EVENT.equals(name)) {
+
+                return;
+            }
+
+            JsonElement body = event.get("data");
+
+            if (body != null && body.isJsonPrimitive()) {
+                handleChatEvent(body.getAsString());
+            }
+        }
+
+        private void sendSubscriptions() {
+            WebSocket socket = webSocket;
+
+            if (socket == null || subscriptionsRequested) {
+
+                return;
+            }
+
+            subscriptionsRequested = true;
+
+            for (int index = 0; index < channels.length; index++) {
+                String channel = channels[index];
+
+                JsonObject subscribe = new JsonObject();
+
+                subscribe.addProperty("channel", channel);
+
+                String channelToken = session.channelTokens.get(channel);
+
+                if (channelToken != null && !channelToken.isBlank()) {
+                    subscribe.addProperty("token", channelToken);
+                }
+
+                JsonObject frame = new JsonObject();
+
+                frame.addProperty("id", index + 2);
+
+                frame.add("subscribe", subscribe);
+
+                socket.sendText(GSON.toJson(frame), true);
+            }
+        }
+
+        private void fail() {
+            synchronized (KickChatClient.this) {
+                if (generation != connectionGeneration) {
+
+                    return;
+                }
+
+                WebSocket socket = webSocket;
+
+                if (socket != null) {
+                    try {
+                        socket.sendClose(WebSocket.NORMAL_CLOSURE, "Reconnecting");
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                webSocket = null;
+
+                setConnectionState(ConnectionState.DISCONNECTED);
+
+                scheduleReconnect();
+            }
         }
 
         @Override
