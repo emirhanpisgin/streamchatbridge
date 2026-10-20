@@ -6,14 +6,20 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 public final class TwitchClient {
 
     private static final String CHAT_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
+
+    private static final String USERS_URL = "https://api.twitch.tv/helix/users";
+
+    private static final int MAX_CHANNEL_LOGIN_LENGTH = 25;
 
     private static final Gson GSON = new Gson();
 
@@ -23,32 +29,145 @@ public final class TwitchClient {
 
     private String channelId;
 
+    /** Human-readable reason for the last failed channel lookup (shown in the UI). */
+    private volatile String lastError;
+
     public TwitchClient(TwitchAuth auth) {
         this.auth = auth;
     }
 
     public boolean setChannel(String channel) {
+        lastError = null;
+
         if (!auth.isAuthenticated()) {
+            lastError = "Not logged in";
+
             return false;
         }
 
-        if (channel == null || channel.isBlank()) {
-            channelId = auth.getUserId();
+        String normalized = normalizeChannelSlug(channel);
+
+        if (normalized.isEmpty()) {
+            String ownId = auth.getUserId();
+
+            if (ownId == null || ownId.isBlank()) {
+                lastError = "Twitch session expired — log in again in the F8 dashboard";
+
+                return false;
+            }
+
+            channelId = ownId;
+
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch channel set to own account");
+
             return true;
         }
 
-        String id = auth.findUserId(channel);
+        if (normalized.length() > MAX_CHANNEL_LOGIN_LENGTH) {
+            lastError = "Channel name is too long (Twitch allows up to " + MAX_CHANNEL_LOGIN_LENGTH + " characters)";
 
-        if (id == null) {
-            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel not found: " + channel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel name is too long: " + normalized);
+
             return false;
         }
 
-        channelId = id;
+        if (!auth.ensureValidToken()) {
+            lastError = "Twitch session expired — log in again in the F8 dashboard";
 
-        StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch channel set to: " + channel);
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot select Twitch channel: no valid access token.");
 
-        return true;
+            return false;
+        }
+
+        try {
+            String url = USERS_URL + "?login=" + URLEncoder.encode(normalized, StandardCharsets.UTF_8);
+
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("Authorization", "Bearer " + auth.getAccessToken()).header("Client-Id", TwitchAuth.CLIENT_ID).header("Accept", "application/json").GET().build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                lastError = response.statusCode() == 401
+                        ? "Twitch session expired — log in again in the F8 dashboard"
+                        : "Twitch API error (HTTP " + response.statusCode() + ")";
+
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel lookup failed. HTTP " + response.statusCode());
+
+                return false;
+            }
+
+            JsonObject json = GSON.fromJson(response.body(), JsonObject.class);
+
+            if (json == null || !json.has("data") || !json.get("data").isJsonArray() || json.getAsJsonArray("data").size() == 0) {
+                lastError = "Twitch channel not found: " + normalized;
+
+                StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel not found: " + normalized);
+
+                return false;
+            }
+
+            channelId = json.getAsJsonArray("data").get(0).getAsJsonObject().get("id").getAsString();
+
+            StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch channel set to: " + normalized);
+
+            return true;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+
+            return false;
+
+        } catch (Exception e) {
+            lastError = "Twitch API unreachable: " + e.getMessage();
+
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch channel lookup failed: " + e.getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Accepts a login, a username with {@code @}, or a pasted channel URL
+     * ({@code https://twitch.tv/foo}, {@code twitch.tv/foo}, {@code www.twitch.tv/foo}).
+     * Returns an empty string when nothing usable is left.
+     */
+    public static String normalizeChannelSlug(String channel) {
+        if (channel == null) {
+            return "";
+        }
+
+        String normalized = channel.trim();
+
+        if (normalized.isEmpty()) {
+            return "";
+        }
+
+        normalized = normalized.replaceFirst("(?i)^https?://", "");
+        normalized = normalized.replaceFirst("(?i)^(www\\.|m\\.)?twitch\\.tv/?", "");
+
+        if (normalized.startsWith("@")) {
+            normalized = normalized.substring(1);
+        }
+
+        int separator = normalized.indexOf('?');
+
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        separator = normalized.indexOf('#');
+
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        separator = normalized.indexOf('/');
+
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        return normalized.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     public boolean sendMessage(String message) {
@@ -131,5 +250,10 @@ public final class TwitchClient {
 
     public String getChannelId() {
         return channelId;
+    }
+
+    /** Reason for the last failed lookup, or {@code null} after a successful one. */
+    public String getLastError() {
+        return lastError;
     }
 }

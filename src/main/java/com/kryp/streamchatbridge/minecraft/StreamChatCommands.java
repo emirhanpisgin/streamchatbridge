@@ -165,7 +165,7 @@ public final class StreamChatCommands {
 
         boolean self = requestedChannel.equalsIgnoreCase("self");
 
-        String channel = self ? auth.getUsername() : normalizeChannel(requestedChannel);
+        String channel = self ? auth.getUsername() : TwitchClient.normalizeChannelSlug(requestedChannel);
 
         if (channel == null || channel.isBlank()) {
             showPlatformError(MinecraftChatBridge.twitch(), "Invalid channel");
@@ -186,7 +186,9 @@ public final class StreamChatCommands {
              * intentional because the selected channel is permanent.
              */
             if (!twitchClient.setChannel(self ? "" : channel)) {
-                showPlatformError(MinecraftChatBridge.twitch(), "Channel not found");
+                String reason = twitchClient.getLastError();
+
+                showPlatformError(MinecraftChatBridge.twitch(), reason == null ? "Channel not found" : reason);
 
                 return;
             }
@@ -201,7 +203,7 @@ public final class StreamChatCommands {
 
             ModConfig config = ConfigManager.get();
 
-            config.twitchChannel = self ? "" : channel;
+            config.twitchChannel = self ? "" : TwitchClient.normalizeChannelSlug(channel);
 
             ConfigManager.save();
 
@@ -226,7 +228,7 @@ public final class StreamChatCommands {
 
         boolean self = requestedChannel.equalsIgnoreCase("self");
 
-        String channel = self ? auth.getUsername() : normalizeChannel(requestedChannel);
+        String channel = self ? auth.getUsername() : KickClient.normalizeChannelSlug(requestedChannel);
 
         if (channel == null || channel.isBlank()) {
             showPlatformError(MinecraftChatBridge.kick(), "Invalid channel");
@@ -315,12 +317,6 @@ public final class StreamChatCommands {
         String channel = configured == null || configured.isBlank() ? auth.getUsername() : configured;
 
         showWatching(MinecraftChatBridge.kick(), channel);
-    }
-
-    private static String normalizeChannel(String channel) {
-        String normalized = KickClient.normalizeChannelSlug(channel);
-
-        return normalized.isBlank() ? null : normalized;
     }
 
     private static void showWatching(MutableComponent platform, String channel) {

@@ -271,24 +271,40 @@ public final class StreamChatConfigScreen extends ScbScreen {
 
         TwitchEventSubClient eventSub = StreamChatBridgeClient.getTwitchEventSub();
 
-        String configuredChannel = ConfigManager.get().twitchChannel;
+        TwitchAuth auth = StreamChatBridgeClient.getTwitchAuth();
+
+        String configuredChannel = TwitchClient.normalizeChannelSlug(ConfigManager.get().twitchChannel);
 
         Threads.start("streamchatbridge-twitch-channel", () -> {
-            if (!twitchClient.setChannel(configuredChannel)) {
-                if (minecraft != null) {
-                    minecraft.execute(() -> {
-                        statusMessage = "Could not select Twitch channel";
+            boolean channelLoaded = twitchClient.setChannel(configuredChannel);
 
-                        rebuild();
-                    });
-                }
+            String reason = twitchClient.getLastError();
 
-                return;
+            boolean fellBack = false;
+
+            if (!channelLoaded && auth.getUserId() != null && twitchClient.setChannel("")) {
+                fellBack = true;
             }
 
-            eventSub.setChannelId(twitchClient.getChannelId());
+            String channelId = twitchClient.getChannelId();
 
-            eventSub.connect();
+            if (channelId != null && !channelId.isBlank()) {
+                eventSub.setChannelId(channelId);
+
+                eventSub.connect();
+            }
+
+            if (minecraft != null && !channelLoaded) {
+                boolean usedFallback = fellBack;
+
+                minecraft.execute(() -> {
+                    statusMessage = usedFallback
+                            ? "Watching your own Twitch channel — " + reason
+                            : "Could not select Twitch channel" + (reason == null ? "" : ": " + reason);
+
+                    rebuild();
+                });
+            }
         });
     }
 

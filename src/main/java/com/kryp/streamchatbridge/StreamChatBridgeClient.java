@@ -98,15 +98,31 @@ public class StreamChatBridgeClient {
     private static void onTwitchAuthenticated() {
         StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Twitch authenticated as: " + TWITCH_AUTH.getUsername());
 
-        String configuredChannel = ConfigManager.get().twitchChannel;
+        String configuredChannel = TwitchClient.normalizeChannelSlug(ConfigManager.get().twitchChannel);
 
-        if (!TWITCH_CLIENT.setChannel(configuredChannel)) {
-            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not use configured Twitch channel: " + configuredChannel);
+        boolean channelLoaded = TWITCH_CLIENT.setChannel(configuredChannel);
+
+        if (!channelLoaded) {
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Twitch sending unavailable: " + TWITCH_CLIENT.getLastError());
+
+            /*
+             * Reading another channel needs its id, so fall back to the
+             * authenticated account's own channel instead of leaving chat off.
+             */
+            if (TWITCH_AUTH.getUserId() != null && TWITCH_CLIENT.setChannel("")) {
+                StreamChatBridge.LOGGER.info("[Stream Chat Bridge] Watching own Twitch channel instead.");
+            }
+        }
+
+        String channelId = TWITCH_CLIENT.getChannelId();
+
+        if (channelId == null || channelId.isBlank()) {
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not connect to Twitch chat: no channel selected.");
 
             return;
         }
 
-        TWITCH_EVENT_SUB.setChannelId(TWITCH_CLIENT.getChannelId());
+        TWITCH_EVENT_SUB.setChannelId(channelId);
 
         TWITCH_EVENT_SUB.connect();
     }

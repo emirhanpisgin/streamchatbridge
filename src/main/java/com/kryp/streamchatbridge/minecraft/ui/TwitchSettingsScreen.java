@@ -232,21 +232,40 @@ public final class TwitchSettingsScreen extends ScbScreen {
 
             TwitchEventSubClient eventSub = StreamChatBridgeClient.getTwitchEventSub();
 
-            if (!twitchClient.setChannel(channel)) {
-                setStatus("Channel not found");
+            boolean channelLoaded = twitchClient.setChannel(channel);
 
+            String reason = twitchClient.getLastError();
+
+            /*
+             * The requested channel could not be resolved (typo, deleted account,
+             * API error). Keep reading chat by falling back to the authenticated
+             * account's own channel, but do not persist the invalid name.
+             */
+            if (!channelLoaded && auth.getUserId() != null) {
+                twitchClient.setChannel("");
+            }
+
+            String channelId = twitchClient.getChannelId();
+
+            if (channelId == null || channelId.isBlank()) {
+                setStatus("Could not select Twitch channel" + (reason == null ? "" : ": " + reason));
                 return;
             }
 
             eventSub.disconnect();
 
-            eventSub.setChannelId(twitchClient.getChannelId());
+            eventSub.setChannelId(channelId);
 
             eventSub.connect();
 
+            if (!channelLoaded) {
+                setStatus("Watching your own Twitch channel — " + reason);
+                return;
+            }
+
             ModConfig config = ConfigManager.get();
 
-            config.twitchChannel = normalizeChannel(channel);
+            config.twitchChannel = TwitchClient.normalizeChannelSlug(channel);
 
             ConfigManager.save();
 
@@ -255,17 +274,7 @@ public final class TwitchSettingsScreen extends ScbScreen {
     }
 
     private String normalizeChannel(String channel) {
-        if (channel == null) {
-            return "";
-        }
-
-        String normalized = channel.trim();
-
-        if (normalized.startsWith("@")) {
-            normalized = normalized.substring(1);
-        }
-
-        return normalized.trim();
+        return TwitchClient.normalizeChannelSlug(channel);
     }
 
     private Component previewComponent() {
