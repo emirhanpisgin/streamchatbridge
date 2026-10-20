@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest an idea or improvement for Stream Chat Bridge
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem first, then the solution you have in mind.
+
+        Check the existing issues and the [README](https://github.com/emirhanpisgin/streamchatbridge#readme) before submitting.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I am using the latest Stream Chat Bridge release.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this affect?
+      options:
+        - Kick
+        - Twitch
+        - Chat display (badges, colors, formats)
+        - Sending messages from Minecraft
+        - F8 dashboard / configuration
+        - Mod compatibility
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what makes it difficult or impossible today?
+      placeholder: I want to ..., but currently ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or different approaches you have tried?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, mockups, links or anything else that helps explain the idea.

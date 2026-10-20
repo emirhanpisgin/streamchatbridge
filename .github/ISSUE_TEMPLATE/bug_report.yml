@@ -1,0 +1,149 @@
+name: Bug report
+description: Report a problem with Stream Chat Bridge
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        Before you fill this in, please make sure you are on the **latest release** (Modrinth / CurseForge) and that you have checked the [README](https://github.com/emirhanpisgin/streamchatbridge#readme) and existing issues.
+
+        **Never paste tokens, client secrets or the files from `%APPDATA%\streamchatbridge`.** Only the relevant lines from `logs/latest.log` are needed.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am using the latest Stream Chat Bridge release.
+          required: true
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I have removed tokens, passwords and personal data from anything I paste below.
+          required: true
+
+  - type: dropdown
+    id: loader
+    attributes:
+      label: Mod loader
+      description: Which loader did you install the mod on?
+      options:
+        - Fabric
+        - Forge
+        - NeoForge
+    validations:
+      required: true
+
+  - type: input
+    id: minecraft-version
+    attributes:
+      label: Minecraft version
+      description: The exact version you are running.
+      placeholder: "1.21.1"
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Stream Chat Bridge version
+      description: The version from the jar file name, including the Minecraft part if present.
+      placeholder: "1.0.1+1.21"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where did you download the mod?
+      options:
+        - Modrinth
+        - CurseForge
+        - GitHub
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Which platform is affected?
+      options:
+        - Kick
+        - Twitch
+        - Both
+        - Neither (UI, config or other)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kick-account
+    attributes:
+      label: If Kick is affected, what kind of Kick account are you using?
+      description: A "viewer" account has no channel on Kick; only streamer accounts can be loaded as your own channel.
+      options:
+        - Not applicable (Twitch only / other)
+        - Streamer account with a Kick channel
+        - Viewer account without a Kick channel
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and any error message you see in-game or in the F8 dashboard.
+      placeholder: When I open F8 and press Connect on the Kick tab, it says "Could not load Kick channel".
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Tell us exactly how to make the problem happen.
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+
+  - type: input
+    id: other-mods
+    attributes:
+      label: Other mods (optional)
+      description: List the other mods if the problem only happens with a specific modpack or combination.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste the relevant lines from `logs/latest.log`.
+
+        For Kick connection problems, the most useful lines contain `Kick`, for example:
+        `Select-String -Path logs\latest.log -Pattern "Kick"` (Windows PowerShell)
+
+        For crashes, attach the full crash report (`crash-reports/crash-*.txt`) instead of pasting the whole log.
+      render: shell
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Additional checks
+      options:
+        - label: The problem still happens with only Stream Chat Bridge (and Fabric API on Fabric) installed.
+        - label: I am running the game in the same language/region as when the problem started.
+        - label: I can reproduce the problem every time.

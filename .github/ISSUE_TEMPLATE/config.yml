@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Downloads and changelogs (Modrinth)
+    url: https://modrinth.com/mod/stream-chat-bridge
+    about: Please update to the latest release before reporting a bug.
+  - name: Setup and troubleshooting (README)
+    url: https://github.com/emirhanpisgin/streamchatbridge#readme
+    about: Installation, supported versions and platform setup.
