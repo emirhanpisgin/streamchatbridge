@@ -4,6 +4,7 @@ import com.kryp.streamchatbridge.StreamChatBridgeClient;
 import com.kryp.streamchatbridge.config.ConfigManager;
 import com.kryp.streamchatbridge.config.ModConfig;
 import com.kryp.streamchatbridge.kick.KickAuth;
+import com.kryp.streamchatbridge.kick.KickClient;
 import com.kryp.streamchatbridge.minecraft.MinecraftChatBridge;
 import com.kryp.streamchatbridge.util.BrowserUtils;
 import com.kryp.streamchatbridge.util.ScbText;
@@ -374,9 +375,9 @@ public final class KickSettingsScreen extends ScbScreen {
 
         ModConfig config = ConfigManager.get();
 
-        String oldChannel = config.kickChannel == null ? "" : config.kickChannel.trim();
+        String oldChannel = KickClient.normalizeChannelSlug(config.kickChannel);
 
-        String newChannel = normalizeChannel(channelField.getValue());
+        String newChannel = KickClient.normalizeChannelSlug(channelField.getValue());
 
         config.kickOutgoingPrefix = prefixField.getValue();
 
@@ -427,7 +428,7 @@ public final class KickSettingsScreen extends ScbScreen {
 
         boolean useOwnChannel = configuredChannel == null || configuredChannel.isBlank();
 
-        String channel = useOwnChannel ? auth.getUsername() : configuredChannel.trim();
+        String channel = useOwnChannel ? auth.getUsername() : KickClient.normalizeChannelSlug(configuredChannel);
 
         if (channel == null || channel.isBlank()) {
             statusMessage = "Kick username unavailable";
@@ -456,38 +457,31 @@ public final class KickSettingsScreen extends ScbScreen {
                 channelLoaded = client.setChannel(channel);
             }
 
-            if (!channelLoaded) {
-                setStatus("Channel not found");
-                return;
+            String readChannel = channel;
+
+            if (channelLoaded) {
+                String resolvedSlug = client.getChannelSlug();
+
+                if (resolvedSlug != null && !resolvedSlug.isBlank()) {
+                    readChannel = resolvedSlug;
+                }
             }
 
-            if (!chat.connect(channel)) {
-                setStatus("Could not connect to channel");
+            if (!chat.connect(readChannel)) {
+                setStatus(!channelLoaded && client.getLastError() != null
+                        ? "Channel not found: " + client.getLastError()
+                        : "Could not connect to channel");
                 return;
             }
 
             ModConfig config = ConfigManager.get();
 
-            config.kickChannel = useOwnChannel ? "" : configuredChannel.trim();
+            config.kickChannel = useOwnChannel ? "" : KickClient.normalizeChannelSlug(configuredChannel);
 
             ConfigManager.save();
 
-            setStatus("Saved");
+            setStatus(channelLoaded ? "Saved" : "Saved (read-only)" + (client.getLastError() == null ? "" : ": " + client.getLastError()));
         });
-    }
-
-    private String normalizeChannel(String channel) {
-        if (channel == null) {
-            return "";
-        }
-
-        String normalized = channel.trim();
-
-        if (normalized.startsWith("@")) {
-            normalized = normalized.substring(1);
-        }
-
-        return normalized.trim();
     }
 
     private void setStatus(String message) {

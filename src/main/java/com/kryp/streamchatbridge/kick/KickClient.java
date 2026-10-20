@@ -24,6 +24,8 @@ public final class KickClient {
 
     private static final int MAX_MESSAGE_LENGTH = 500;
 
+    private static final int MAX_CHANNEL_SLUG_LENGTH = 25;
+
     private static final Gson GSON = new Gson();
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -34,6 +36,9 @@ public final class KickClient {
     private volatile String channelSlug;
     private volatile String broadcasterUserId;
 
+    /** Human-readable reason for the last failed channel lookup (shown in the UI). */
+    private volatile String lastError;
+
     public KickClient(KickAuth auth) {
         this.auth = auth;
     }
@@ -43,21 +48,35 @@ public final class KickClient {
      */
 
     public boolean setChannel(String channel) {
+        lastError = null;
+
         if (!auth.isAuthenticated()) {
+            lastError = "Not logged in";
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot select Kick channel: account is not authenticated.");
 
             return false;
         }
 
-        String normalized = normalizeChannel(channel);
+        String normalized = normalizeChannelSlug(channel);
 
-        if (normalized == null) {
+        if (normalized.isEmpty()) {
             return loadOwnChannel();
+        }
+
+        if (normalized.length() > MAX_CHANNEL_SLUG_LENGTH) {
+            lastError = "Channel name is too long (Kick allows up to " + MAX_CHANNEL_SLUG_LENGTH + " characters)";
+
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel name is too long: " + normalized);
+
+            return false;
         }
 
         String accessToken = auth.getValidAccessToken();
 
         if (accessToken == null) {
+            lastError = "Kick session expired — log in again in the F8 dashboard";
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot select Kick channel: no valid access token.");
 
             return false;
@@ -71,6 +90,8 @@ public final class KickClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
+                lastError = "Kick API error (HTTP " + response.statusCode() + ")";
+
                 StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
@@ -79,6 +100,8 @@ public final class KickClient {
             JsonObject channelObject = getFirstChannel(response.body());
 
             if (channelObject == null) {
+                lastError = "Kick channel not found: " + normalized;
+
                 StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel not found: " + normalized);
 
                 return false;
@@ -98,6 +121,8 @@ public final class KickClient {
             return false;
 
         } catch (Exception e) {
+            lastError = "Kick API unreachable: " + e.getMessage();
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
 
             return false;
@@ -105,7 +130,11 @@ public final class KickClient {
     }
 
     public boolean loadOwnChannel() {
+        lastError = null;
+
         if (!auth.isAuthenticated()) {
+            lastError = "Not logged in";
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot load Kick channel: account is not authenticated.");
 
             return false;
@@ -114,6 +143,8 @@ public final class KickClient {
         String accessToken = auth.getValidAccessToken();
 
         if (accessToken == null) {
+            lastError = "Kick session expired — log in again in the F8 dashboard";
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Cannot load Kick channel: no valid access token.");
 
             return false;
@@ -125,6 +156,8 @@ public final class KickClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
+                lastError = "Kick API error (HTTP " + response.statusCode() + ")";
+
                 StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed. HTTP " + response.statusCode() + ": " + response.body());
 
                 return false;
@@ -133,6 +166,8 @@ public final class KickClient {
             JsonObject channelObject = getFirstChannel(response.body());
 
             if (channelObject == null) {
+                lastError = "This Kick account has no channel";
+
                 StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick account has no channel.");
 
                 return false;
@@ -157,6 +192,8 @@ public final class KickClient {
             return false;
 
         } catch (Exception e) {
+            lastError = "Kick API unreachable: " + e.getMessage();
+
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup failed: " + e.getMessage());
 
             return false;
@@ -171,6 +208,7 @@ public final class KickClient {
         String newBroadcasterUserId = readString(channel, "broadcaster_user_id");
 
         if (newBroadcasterUserId == null || newBroadcasterUserId.isBlank()) {
+            lastError = "Kick API returned an unexpected channel response";
 
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel response did not contain broadcaster_user_id.");
 
@@ -186,10 +224,11 @@ public final class KickClient {
         return true;
     }
 
-    private static JsonObject getFirstChannel(String responseBody) {
+    private JsonObject getFirstChannel(String responseBody) {
         JsonObject root = GSON.fromJson(responseBody, JsonObject.class);
 
         if (root == null || !root.has("data") || !root.get("data").isJsonArray()) {
+            lastError = "Kick API returned an unexpected response";
 
             StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick channel lookup returned an invalid response: " + responseBody);
 
@@ -209,20 +248,48 @@ public final class KickClient {
         return data.get(0).getAsJsonObject();
     }
 
-    private static String normalizeChannel(String channel) {
+    /**
+     * Accepts a slug, a username with or without {@code @}, or a pasted channel URL
+     * ({@code https://kick.com/foo}, {@code kick.com/foo}, {@code www.kick.com/foo}).
+     * Returns an empty string when nothing usable is left.
+     */
+    public static String normalizeChannelSlug(String channel) {
         if (channel == null) {
-            return null;
+            return "";
         }
 
         String normalized = channel.trim();
+
+        if (normalized.isEmpty()) {
+            return "";
+        }
+
+        normalized = normalized.replaceFirst("(?i)^https?://", "");
+        normalized = normalized.replaceFirst("(?i)^(www\\.)?kick\\.com/?", "");
 
         if (normalized.startsWith("@")) {
             normalized = normalized.substring(1);
         }
 
-        normalized = normalized.trim();
+        int separator = normalized.indexOf('?');
 
-        return normalized.isBlank() ? null : normalized;
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        separator = normalized.indexOf('#');
+
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        separator = normalized.indexOf('/');
+
+        if (separator >= 0) {
+            normalized = normalized.substring(0, separator);
+        }
+
+        return normalized.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     /*
@@ -345,6 +412,11 @@ public final class KickClient {
         channelId = null;
         channelSlug = null;
         broadcasterUserId = null;
+    }
+
+    /** Reason for the last failed lookup, or {@code null} after a successful one. */
+    public String getLastError() {
+        return lastError;
     }
 
     public boolean hasChannel() {

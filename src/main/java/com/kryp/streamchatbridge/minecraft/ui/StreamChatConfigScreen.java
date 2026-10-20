@@ -462,11 +462,11 @@ public final class StreamChatConfigScreen extends ScbScreen {
             return;
         }
 
-        String configuredChannel = ConfigManager.get().kickChannel;
+        String configuredChannel = KickClient.normalizeChannelSlug(ConfigManager.get().kickChannel);
 
-        boolean useOwnChannel = configuredChannel == null || configuredChannel.isBlank();
+        boolean useOwnChannel = configuredChannel.isEmpty();
 
-        String channel = useOwnChannel ? auth.getUsername() : configuredChannel.trim();
+        String channel = useOwnChannel ? auth.getUsername() : configuredChannel;
 
         if (channel == null || channel.isBlank()) {
             statusMessage = "No Kick channel selected";
@@ -485,23 +485,34 @@ public final class StreamChatConfigScreen extends ScbScreen {
                 channelLoaded = client.setChannel(channel);
             }
 
-            if (!channelLoaded) {
-                if (minecraft != null) {
-                    minecraft.execute(() -> {
-                        statusMessage = "Could not load Kick channel";
+            String readChannel = channel;
 
-                        rebuild();
-                    });
+            if (channelLoaded) {
+                String resolvedSlug = client.getChannelSlug();
+
+                if (resolvedSlug != null && !resolvedSlug.isBlank()) {
+                    readChannel = resolvedSlug;
                 }
-
-                return;
             }
 
-            boolean started = chat.connect(channel);
+            /*
+             * Reading only needs the slug, so start the chat reader even when the
+             * official channel lookup failed (for example an expired session or an
+             * account without a channel). Sending stays unavailable in that case.
+             */
+            boolean started = chat.connect(readChannel);
 
-            if (!started && minecraft != null) {
+            if (minecraft != null) {
+                String reason = client.getLastError();
+
                 minecraft.execute(() -> {
-                    statusMessage = "Could not connect to Kick chat";
+                    if (started) {
+                        statusMessage = channelLoaded ? "" : "Connected (read-only)" + (reason == null ? "" : ": " + reason);
+                    } else if (!channelLoaded) {
+                        statusMessage = reason == null ? "Could not load Kick channel" : "Could not load Kick channel: " + reason;
+                    } else {
+                        statusMessage = "Could not connect to Kick chat";
+                    }
 
                     rebuild();
                 });

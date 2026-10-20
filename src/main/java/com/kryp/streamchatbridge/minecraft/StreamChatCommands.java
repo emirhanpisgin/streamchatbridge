@@ -249,25 +249,33 @@ public final class StreamChatCommands {
                 channelLoaded = client.setChannel(channel);
             }
 
-            if (!channelLoaded) {
-                showPlatformError(MinecraftChatBridge.kick(), "Channel not found");
+            String readChannel = channel;
 
-                return;
+            if (channelLoaded) {
+                String resolvedSlug = client.getChannelSlug();
+
+                if (resolvedSlug != null && !resolvedSlug.isBlank()) {
+                    readChannel = resolvedSlug;
+                }
             }
 
-            if (!chat.connect(channel)) {
-                showPlatformError(MinecraftChatBridge.kick(), "Could not connect to channel");
+            if (!chat.connect(readChannel)) {
+                String reason = client.getLastError();
+
+                showPlatformError(MinecraftChatBridge.kick(), !channelLoaded && reason != null
+                        ? "Channel not found: " + reason
+                        : "Could not connect to channel");
 
                 return;
             }
 
             ModConfig config = ConfigManager.get();
 
-            config.kickChannel = self ? "" : channel;
+            config.kickChannel = self ? "" : KickClient.normalizeChannelSlug(channel);
 
             ConfigManager.save();
 
-            showWatching(MinecraftChatBridge.kick(), channel);
+            showWatching(MinecraftChatBridge.kick(), channel + (channelLoaded ? "" : " (read-only)"));
         });
     }
 
@@ -310,17 +318,7 @@ public final class StreamChatCommands {
     }
 
     private static String normalizeChannel(String channel) {
-        if (channel == null) {
-            return null;
-        }
-
-        String normalized = channel.trim();
-
-        if (normalized.startsWith("@")) {
-            normalized = normalized.substring(1);
-        }
-
-        normalized = normalized.trim();
+        String normalized = KickClient.normalizeChannelSlug(channel);
 
         return normalized.isBlank() ? null : normalized;
     }

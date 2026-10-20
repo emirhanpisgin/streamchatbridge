@@ -126,29 +126,42 @@ public class StreamChatBridgeClient {
             return;
         }
 
-        String configuredChannel = ConfigManager.get().kickChannel;
+        String configuredChannel = KickClient.normalizeChannelSlug(ConfigManager.get().kickChannel);
 
-        String channel = configuredChannel == null || configuredChannel.isBlank() ? username : configuredChannel.trim();
+        String channel = configuredChannel.isEmpty() ? username : configuredChannel;
 
         boolean channelLoaded;
 
-        if (configuredChannel == null || configuredChannel.isBlank()) {
+        if (configuredChannel.isEmpty()) {
 
             channelLoaded = KICK_CLIENT.loadOwnChannel();
 
         } else {
 
-            channelLoaded = KICK_CLIENT.setChannel(channel);
+            channelLoaded = KICK_CLIENT.setChannel(configuredChannel);
         }
 
         if (!channelLoaded) {
-            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not load Kick channel: " + channel);
-
-            return;
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Kick sending unavailable: " + KICK_CLIENT.getLastError());
         }
 
-        if (!KICK_CHAT.connect(channel)) {
-            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not connect to Kick chat: " + channel);
+        /*
+         * Reading only needs the slug. Prefer the slug Kick resolved for us (it can
+         * differ from the username), otherwise use the configured channel or the
+         * authenticated username.
+         */
+        String chatChannel = channel;
+
+        if (channelLoaded) {
+            String resolvedSlug = KICK_CLIENT.getChannelSlug();
+
+            if (resolvedSlug != null && !resolvedSlug.isBlank()) {
+                chatChannel = resolvedSlug;
+            }
+        }
+
+        if (!KICK_CHAT.connect(chatChannel)) {
+            StreamChatBridge.LOGGER.warn("[Stream Chat Bridge] Could not connect to Kick chat: " + chatChannel);
         }
     }
 
